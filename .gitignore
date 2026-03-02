@@ -1,0 +1,21 @@
+# Node / Next.js
+frontend/node_modules
+frontend/.next
+frontend/.turbo
+frontend/.vercel
+
+# Python
+backend/.venv
+__pycache__/
+
+# 환경 변수 / 민감 정보
+*.env
+*.env.local
+frontend/.env.local
+backend/.env
+backend/.env.*
+
+# 기타
+.DS_Store
+.vscode
+.idea
