@@ -19,14 +19,22 @@ def generate_post_from_context(
 ) -> dict:
     """
     LLM API를 호출해 네이버 블로그용 본문과 인스타그램 캡션/해시태그를 생성합니다.
-    JSON 강제 대신 커스텀 마커 기반 파싱을 사용해 실패 가능성을 줄입니다.
+    실패 시에는 가능한 한 구체적인 에러 메시지를 본문에 노출해 디버깅을 돕습니다.
     """
     if not llm_api_url:
         return {
-            "blog_title": "임시 제목 - LLM 설정 전",
-            "blog_body": "LLM_API_URL이 설정되지 않아 더미 본문을 반환합니다.",
-            "instagram_caption": "LLM 설정 전 임시 인스타 캡션입니다.",
-            "instagram_hashtags": ["#맛집", "#임시"],
+            "blog_title": "LLM 설정 오류",
+            "blog_body": "LLM_API_URL이 설정되지 않았습니다. Render 환경변수를 확인해주세요.",
+            "instagram_caption": "LLM 설정 오류",
+            "instagram_hashtags": ["#설정오류"],
+        }
+
+    if not llm_api_key:
+        return {
+            "blog_title": "LLM 키 설정 오류",
+            "blog_body": "LLM_API_KEY가 설정되지 않았습니다. Render 환경변수를 확인해주세요.",
+            "instagram_caption": "LLM 설정 오류",
+            "instagram_hashtags": ["#설정오류"],
         }
 
     prompt = build_prompt(
@@ -59,45 +67,79 @@ def generate_post_from_context(
 
     try:
         resp = requests.post(llm_api_url, json=body, headers=headers, timeout=60)
-        resp.raise_for_status()
+    except Exception as e:
+        logger.exception("LLM HTTP 요청 실패: %s", e)
+        return {
+            "blog_title": "LLM 호출 실패",
+            "blog_body": f"LLM HTTP 요청 중 오류가 발생했습니다: {e}",
+            "instagram_caption": "LLM 호출 실패",
+            "instagram_hashtags": ["#llm오류"],
+        }
+
+    # HTTP 에러 상태 코드 처리
+    if not resp.ok:
+        text = ""
+        try:
+            text = resp.text
+        except Exception:
+            text = "<본문 없음>"
+        logger.error("LLM HTTP 에러: status=%s, body=%s", resp.status_code, text)
+        return {
+            "blog_title": "LLM HTTP 에러",
+            "blog_body": f"status={resp.status_code}, body={text}",
+            "instagram_caption": "LLM HTTP 에러",
+            "instagram_hashtags": ["#llm오류"],
+        }
+
+    try:
         raw = resp.json()
-        # 디버깅용 로그 (Render Logs에서 확인)
-        logger.info("RAW LLM RESPONSE: %s", raw)
+    except ValueError as e:
+        logger.error("LLM JSON 디코딩 실패: %s, text=%s", e, resp.text)
+        return {
+            "blog_title": "LLM JSON 파싱 오류",
+            "blog_body": f"LLM 응답이 JSON이 아닙니다: {e}\n{resp.text}",
+            "instagram_caption": "LLM JSON 파싱 오류",
+            "instagram_hashtags": ["#llm오류"],
+        }
+
+    logger.info("RAW LLM RESPONSE: %s", raw)
+
+    # OpenAI 형식에 맞게 content 추출
+    try:
         content = raw["choices"][0]["message"]["content"]
-        logger.info("LLM CONTENT: %s", content)
-
-        blog_title = _extract_between(
-            content, "[BLOG_TITLE]", "[/BLOG_TITLE]"
-        ) or "임시 제목"
-        blog_body = _extract_between(
-            content, "[BLOG_BODY]", "[/BLOG_BODY]"
-        ) or "임시 본문"
-        insta_caption = _extract_between(
-            content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]"
-        ) or "임시 인스타 캡션"
-        hashtags_block = _extract_between(
-            content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]"
-        ) or ""
-
-        hashtags = [
-            token
-            for token in hashtags_block.replace("\n", " ").split(" ")
-            if token.strip().startswith("#")
-        ] or ["#맛집", "#임시"]
-
+    except Exception as e:
+        logger.error("LLM choices 파싱 실패: %s", e)
         return {
-            "blog_title": blog_title.strip(),
-            "blog_body": blog_body.strip(),
-            "instagram_caption": insta_caption.strip(),
-            "instagram_hashtags": hashtags,
+            "blog_title": "LLM 응답 구조 오류",
+            "blog_body": f"choices 구조를 파싱하지 못했습니다: {e}\n{raw}",
+            "instagram_caption": "LLM 응답 구조 오류",
+            "instagram_hashtags": ["#llm오류"],
         }
-    except Exception:
-        return {
-            "blog_title": "임시 제목 - LLM 응답 파싱 실패",
-            "blog_body": "LLM 응답을 파싱하는 중 문제가 발생하여 임시 본문을 반환합니다.",
-            "instagram_caption": "LLM 응답 파싱 실패로 인한 임시 캡션입니다.",
-            "instagram_hashtags": ["#맛집", "#임시"],
-        }
+
+    logger.info("LLM CONTENT: %s", content)
+
+    # 마커 기반 파싱
+    blog_title = _extract_between(content, "[BLOG_TITLE]", "[/BLOG_TITLE]") or "임시 제목"
+    blog_body = _extract_between(content, "[BLOG_BODY]", "[/BLOG_BODY]") or "임시 본문"
+    insta_caption = (
+        _extract_between(content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]") or "임시 인스타 캡션"
+    )
+    hashtags_block = (
+        _extract_between(content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]") or ""
+    )
+
+    hashtags = [
+        token
+        for token in hashtags_block.replace("\n", " ").split(" ")
+        if token.strip().startswith("#")
+    ] or ["#맛집", "#임시"]
+
+    return {
+        "blog_title": blog_title.strip(),
+        "blog_body": blog_body.strip(),
+        "instagram_caption": insta_caption.strip(),
+        "instagram_hashtags": hashtags,
+    }
 
 
 def build_prompt(
