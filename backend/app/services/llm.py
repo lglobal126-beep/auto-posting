@@ -18,13 +18,13 @@ def generate_post_from_context(
     keywords: Optional[List[str]],
 ) -> dict:
     """
-    LLM API를 호출해 네이버 블로그용 본문과 인스타그램 캡션/해시태그를 생성합니다.
-    실패 시에는 가능한 한 구체적인 에러 메시지를 본문에 노출해 디버깅을 돕습니다.
+    Google Gemini API (generateContent) 형식으로 LLM을 호출해
+    네이버 블로그용 본문과 인스타그램 캡션/해시태그를 생성합니다.
     """
     if not llm_api_url:
         return {
             "blog_title": "LLM 설정 오류",
-            "blog_body": "LLM_API_URL이 설정되지 않았습니다. Render 환경변수를 확인해주세요.",
+            "blog_body": "LLM_API_URL이 설정되지 않았습니다.",
             "instagram_caption": "LLM 설정 오류",
             "instagram_hashtags": ["#설정오류"],
         }
@@ -32,7 +32,7 @@ def generate_post_from_context(
     if not llm_api_key:
         return {
             "blog_title": "LLM 키 설정 오류",
-            "blog_body": "LLM_API_KEY가 설정되지 않았습니다. Render 환경변수를 확인해주세요.",
+            "blog_body": "LLM_API_KEY가 설정되지 않았습니다.",
             "instagram_caption": "LLM 설정 오류",
             "instagram_hashtags": ["#설정오류"],
         }
@@ -45,28 +45,31 @@ def generate_post_from_context(
         keywords=keywords,
     )
 
-    model = os.getenv("LLM_API_MODEL", "gpt-4o-mini")
+    # Gemini generateContent 형식 (레퍼런스 그대로)
+    # LLM_API_URL 예시:
+    # https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+    url = llm_api_url
     headers = {
-        "Authorization": f"Bearer {llm_api_key}",
+        "x-goog-api-key": llm_api_key,
         "Content-Type": "application/json",
     }
     body = {
-        "model": model,
-        "messages": [
+        "contents": [
             {
-                "role": "system",
-                "content": "당신은 1,000만 구독자를 가진 한국의 맛집 인플루언서입니다.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
+                "parts": [
+                    {
+                        "text": prompt,
+                    }
+                ]
+            }
         ],
-        "temperature": 0.7,
+        "generationConfig": {
+            "temperature": 0.7,
+        },
     }
 
     try:
-        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=60)
+        resp = requests.post(url, json=body, headers=headers, timeout=60)
     except Exception as e:
         logger.exception("LLM HTTP 요청 실패: %s", e)
         return {
@@ -76,7 +79,6 @@ def generate_post_from_context(
             "instagram_hashtags": ["#llm오류"],
         }
 
-    # HTTP 에러 상태 코드 처리
     if not resp.ok:
         text = ""
         try:
@@ -104,21 +106,23 @@ def generate_post_from_context(
 
     logger.info("RAW LLM RESPONSE: %s", raw)
 
-    # OpenAI 형식에 맞게 content 추출
+    # Gemini 형식: candidates[0].content.parts[*].text
     try:
-        content = raw["choices"][0]["message"]["content"]
+        candidates = raw.get("candidates", [])
+        first = candidates[0]
+        parts = first["content"]["parts"]
+        content = "".join(part.get("text", "") for part in parts)
     except Exception as e:
-        logger.error("LLM choices 파싱 실패: %s", e)
+        logger.error("LLM candidates 파싱 실패: %s", e)
         return {
             "blog_title": "LLM 응답 구조 오류",
-            "blog_body": f"choices 구조를 파싱하지 못했습니다: {e}\n{raw}",
+            "blog_body": f"candidates 구조를 파싱하지 못했습니다: {e}\n{raw}",
             "instagram_caption": "LLM 응답 구조 오류",
             "instagram_hashtags": ["#llm오류"],
         }
 
     logger.info("LLM CONTENT: %s", content)
 
-    # 마커 기반 파싱
     blog_title = _extract_between(content, "[BLOG_TITLE]", "[/BLOG_TITLE]") or "임시 제목"
     blog_body = _extract_between(content, "[BLOG_BODY]", "[/BLOG_BODY]") or "임시 본문"
     insta_caption = (
