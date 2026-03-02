@@ -1,7 +1,10 @@
 from typing import List, Optional
 import os
+import logging
 
 import requests
+
+logger = logging.getLogger("llm")
 
 
 def generate_post_from_context(
@@ -59,9 +62,9 @@ def generate_post_from_context(
         resp.raise_for_status()
         raw = resp.json()
         # 디버깅용 로그 (Render Logs에서 확인)
-        print("RAW LLM RESPONSE:", raw)
+        logger.info("RAW LLM RESPONSE: %s", raw)
         content = raw["choices"][0]["message"]["content"]
-        print("LLM CONTENT:", content)
+        logger.info("LLM CONTENT: %s", content)
 
         blog_title = _extract_between(
             content, "[BLOG_TITLE]", "[/BLOG_TITLE]"
