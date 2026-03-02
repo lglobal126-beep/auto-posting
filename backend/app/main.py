@@ -10,14 +10,9 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    allowed_origins = [
-        "https://auto-posting-sigma.vercel.app",  # Vercel 프론트
-        "http://localhost:3000",                  # 로컬 개발용
-    ]
-
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
+        allow_origins=["*"],  # 개발 및 소규모 개인용 → 전부 허용
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

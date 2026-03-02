@@ -17,6 +17,14 @@ def generate_post_from_context(
     LLM API를 호출해 네이버 블로그용 본문과 인스타그램 캡션/해시태그를 생성합니다.
     실제 LLM 제공자에 맞게 payload/헤더는 조정해야 합니다.
     """
+    # LLM 엔드포인트가 설정되지 않은 경우, 더미 데이터 반환 (개발/테스트용)
+    if not llm_api_url:
+        return {
+            "blog_title": "임시 제목 - LLM 설정 전",
+            "blog_body": "LLM_API_URL이 설정되지 않아 더미 본문을 반환합니다.",
+            "instagram_caption": "LLM 설정 전 임시 인스타 캡션입니다.",
+            "instagram_hashtags": ["#맛집", "#임시"],
+        }
     prompt = build_prompt(
         restaurant_name=restaurant_name,
         ocr_text=ocr_text,
