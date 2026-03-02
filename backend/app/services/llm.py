@@ -1,6 +1,5 @@
 from typing import List, Optional
 import os
-import json
 
 import requests
 
@@ -17,9 +16,8 @@ def generate_post_from_context(
 ) -> dict:
     """
     LLM API를 호출해 네이버 블로그용 본문과 인스타그램 캡션/해시태그를 생성합니다.
-    실제 LLM 제공자에 맞게 payload/헤더는 조정해야 합니다.
+    JSON 강제 대신 커스텀 마커 기반 파싱을 사용해 실패 가능성을 줄입니다.
     """
-    # LLM 엔드포인트가 설정되지 않은 경우, 더미 데이터 반환 (개발/테스트용)
     if not llm_api_url:
         return {
             "blog_title": "임시 제목 - LLM 설정 전",
@@ -27,6 +25,7 @@ def generate_post_from_context(
             "instagram_caption": "LLM 설정 전 임시 인스타 캡션입니다.",
             "instagram_hashtags": ["#맛집", "#임시"],
         }
+
     prompt = build_prompt(
         restaurant_name=restaurant_name,
         ocr_text=ocr_text,
@@ -35,7 +34,6 @@ def generate_post_from_context(
         keywords=keywords,
     )
 
-    # OpenAI Chat Completions 형식 호출 (기본 모델은 환경변수 또는 gpt-4o-mini)
     model = os.getenv("LLM_API_MODEL", "gpt-4o-mini")
     headers = {
         "Authorization": f"Bearer {llm_api_key}",
@@ -46,7 +44,7 @@ def generate_post_from_context(
         "messages": [
             {
                 "role": "system",
-                "content": "당신은 1,000만 구독자를 가진 한국의 맛집 인플루언서입니다. 반드시 JSON만 출력하세요.",
+                "content": "당신은 1,000만 구독자를 가진 한국의 맛집 인플루언서입니다.",
             },
             {
                 "role": "user",
@@ -54,8 +52,6 @@ def generate_post_from_context(
             },
         ],
         "temperature": 0.7,
-        # 최신 OpenAI API에서 JSON 전용 응답을 요청
-        "response_format": {"type": "json_object"},
     }
 
     try:
@@ -64,29 +60,32 @@ def generate_post_from_context(
         raw = resp.json()
         content = raw["choices"][0]["message"]["content"]
 
-        # 1차: 그대로 JSON 파싱 시도
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
-            # 2차: 텍스트 안에서 JSON 객체 부분만 추출해 재시도
-            start = content.find("{")
-            end = content.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                snippet = content[start : end + 1]
-                parsed = json.loads(snippet)
-            else:
-                raise
+        blog_title = _extract_between(
+            content, "[BLOG_TITLE]", "[/BLOG_TITLE]"
+        ) or "임시 제목"
+        blog_body = _extract_between(
+            content, "[BLOG_BODY]", "[/BLOG_BODY]"
+        ) or "임시 본문"
+        insta_caption = _extract_between(
+            content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]"
+        ) or "임시 인스타 캡션"
+        hashtags_block = _extract_between(
+            content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]"
+        ) or ""
+
+        hashtags = [
+            token
+            for token in hashtags_block.replace("\n", " ").split(" ")
+            if token.strip().startswith("#")
+        ] or ["#맛집", "#임시"]
 
         return {
-            "blog_title": parsed.get("blog_title", "임시 제목"),
-            "blog_body": parsed.get("blog_body", "임시 본문"),
-            "instagram_caption": parsed.get("instagram_caption", "임시 인스타 캡션"),
-            "instagram_hashtags": parsed.get(
-                "instagram_hashtags", ["#맛집", "#임시"]
-            ),
+            "blog_title": blog_title.strip(),
+            "blog_body": blog_body.strip(),
+            "instagram_caption": insta_caption.strip(),
+            "instagram_hashtags": hashtags,
         }
     except Exception:
-        # 실패 시에도 서비스가 죽지 않도록 방어적 기본값 반환
         return {
             "blog_title": "임시 제목 - LLM 응답 파싱 실패",
             "blog_body": "LLM 응답을 파싱하는 중 문제가 발생하여 임시 본문을 반환합니다.",
@@ -107,8 +106,7 @@ def build_prompt(
     keywords_str = ", ".join(keywords or [])
 
     return f"""
-역할: 당신은 1,000만 구독자를 가진 한국의 맛집 인플루언서입니다.
-톤: 진솔하지만 세련된 말투, 정보성 + 공감 섞인 존댓말.
+다음 정보를 바탕으로 맛집 리뷰와 인스타그램 캡션을 작성하세요.
 
 [식당 기본 정보]
 - 식당 이름(추정): {restaurant_name or "알 수 없음"}
@@ -125,10 +123,32 @@ def build_prompt(
 [사용자 키워드]
 {keywords_str or "키워드 없음"}
 
-요구사항:
-1. 네이버 블로그용 제목과 본문을 생성하세요.
-2. 본문에는 운영시간, 주차, 편의시설, 분위기, 인기 메뉴 등에 대해 네이버 리뷰와 텍스트들을 바탕으로 정리해서 포함해주세요. 확실하지 않은 정보는 추측으로 단정하지 말고, 리뷰에서 느껴지는 분위기 위주로 서술하세요.
-3. 인스타그램용 짧은 캡션과 해시태그 10~15개를 같이 생성하세요.
-4. 결과는 JSON 형식으로 반환하세요. 필드는 blog_title, blog_body, instagram_caption, instagram_hashtags(문자열 리스트) 입니다.
+출력 형식은 아래 마커를 반드시 포함해서 작성하세요:
+
+[BLOG_TITLE]
+여기에 네이버 블로그 글 제목 한 줄
+[/BLOG_TITLE]
+
+[BLOG_BODY]
+여기에 네이버 블로그 본문. 운영시간, 주차, 편의시설, 분위기, 인기 메뉴 등을 리뷰와 정보를 바탕으로 자연스럽게 서술하세요. 과장 광고는 피하고 솔직한 후기 스타일의 존댓말을 사용하세요.
+[/BLOG_BODY]
+
+[INSTA_CAPTION]
+여기에 인스타그램 캡션 2~4문장 정도. 핵심만 담고 자연스럽게 작성하세요.
+[/INSTA_CAPTION]
+
+[INSTA_HASHTAGS]
+여기에 인스타그램 해시태그 10~15개를 한 줄 또는 두 줄에 나눠서 적으세요. 예: #강남맛집 #곱창맛집 #퇴근후한잔
+[/INSTA_HASHTAGS]
     """.strip()
+
+
+def _extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
+    start = text.find(start_tag)
+    end = text.find(end_tag)
+    if start == -1 or end == -1 or end <= start:
+        return None
+    start += len(start_tag)
+    return text[start:end]
+
 
