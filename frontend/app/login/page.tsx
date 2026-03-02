@@ -34,53 +34,51 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-6">
-        <h1 className="text-2xl font-bold text-center">로그인</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">이메일</label>
-            <input
-              type="email"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">비밀번호</label>
-            <input
-              type="password"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && (
-            <p className="text-xs text-red-600">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            className="w-full py-2 rounded-md bg-black text-white text-center text-sm disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? "로그인 중..." : "로그인"}
-          </button>
-        </form>
-        <div className="text-center text-xs text-gray-500">
-          계정 생성은 관리자(본인)가 Supabase 대시보드에서 직접 처리합니다.
-        </div>
-        <div className="text-center">
-          <Link href="/" className="text-xs text-blue-600 underline">
-            홈으로 돌아가기
-          </Link>
-        </div>
+    <div className="app-card">
+      <div className="app-card-header">
+        <div className="app-icon-circle">🔐</div>
+        <h1 className="app-title">로그인</h1>
+        <p className="app-subtitle">
+          내 맛집 기록을 안전하게 관리하기 위해 로그인이 필요합니다.
+        </p>
       </div>
-    </main>
+
+      <form onSubmit={handleSubmit}>
+        <div className="form-field">
+          <label className="form-label">이메일</label>
+          <input
+            type="email"
+            className="form-input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-field">
+          <label className="form-label">비밀번호</label>
+          <input
+            type="password"
+            className="form-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        {error && <p className="error-text">{error}</p>}
+
+        <button
+          type="submit"
+          className="app-primary-btn"
+          disabled={loading}
+        >
+          {loading ? "로그인 중..." : "로그인"}
+        </button>
+      </form>
+
+      <div className="app-link-row">
+        <Link href="/">홈으로 돌아가기</Link>
+      </div>
+    </div>
   );
 }
 

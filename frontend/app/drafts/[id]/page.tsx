@@ -12,6 +12,7 @@ type DraftDetailData = {
   visit_datetime?: string | null;
   blog_title: string;
   blog_body: string;
+  blog_hashtags: string[];
   instagram_caption: string;
   instagram_hashtags: string[];
 };
@@ -114,92 +115,109 @@ export default function DraftDetailPage() {
 
   if (error || !data) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4">
-        <p className="text-sm text-red-600 mb-4">
+      <div className="app-card">
+        <p className="error-text">
           {error ?? "초안 정보를 찾을 수 없습니다."}
         </p>
-        <Link href="/" className="text-xs text-blue-600 underline">
-          홈으로 돌아가기
-        </Link>
-      </main>
+        <div className="app-link-row">
+          <Link href="/">홈으로 돌아가기</Link>
+        </div>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center px-4 py-6">
-      <div className="w-full max-w-2xl space-y-6">
-        <h1 className="text-xl font-bold">
+    <div className="app-card">
+      <div className="app-card-header">
+        <div className="app-icon-circle">📄</div>
+        <h1 className="app-title">
           {data.blog_title || "제목 없는 초안"}
         </h1>
         {data.restaurant_name && (
-          <p className="text-sm text-gray-600">
+          <p className="app-subtitle">
             식당: {data.restaurant_name}
           </p>
         )}
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold">네이버 블로그 본문</h2>
-          <div className="border border-gray-200 rounded-md p-3 text-sm whitespace-pre-line">
-            {data.blog_body}
-          </div>
-        </section>
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold">인스타그램 캡션</h2>
-          <div className="border border-gray-200 rounded-md p-3 text-sm whitespace-pre-line">
-            {data.instagram_caption}
-            {data.instagram_hashtags?.length > 0 && (
-              <div className="mt-2 text-xs text-gray-700">
-                {data.instagram_hashtags.join(" ")}
+      </div>
+
+      <div className="two-column" style={{ marginBottom: 20 }}>
+        <section>
+          <h2 className="form-label">네이버 블로그용 포스팅</h2>
+          <div className="form-textarea" style={{ minHeight: 160 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              {data.blog_title}
+            </div>
+            <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
+              {data.blog_body}
+            </div>
+            {data.blog_hashtags?.length > 0 && (
+              <div style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}>
+                {data.blog_hashtags.join(" ")}
               </div>
             )}
           </div>
         </section>
 
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold">발행 설정</h2>
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={publishToNaver}
-                onChange={(e) => setPublishToNaver(e.target.checked)}
-              />
-              네이버 블로그
-            </label>
-            <label className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={publishToInstagram}
-                onChange={(e) => setPublishToInstagram(e.target.checked)}
-              />
-              인스타그램
-            </label>
+        <section>
+          <h2 className="form-label">인스타그램용 포스팅</h2>
+          <div className="form-textarea" style={{ minHeight: 160 }}>
+            <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
+              {data.instagram_caption}
+            </div>
+            {data.instagram_hashtags?.length > 0 && (
+              <div style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}>
+                {data.instagram_hashtags.join(" ")}
+              </div>
+            )}
           </div>
-          {publishError && (
-            <p className="text-xs text-red-600">{publishError}</p>
-          )}
-          {publishSuccess && (
-            <p className="text-xs text-green-600">{publishSuccess}</p>
-          )}
-          <button
-            type="button"
-            className="mt-2 w-full py-2 rounded-md bg-black text-white text-center text-sm disabled:opacity-60"
-            onClick={handlePublish}
-            disabled={publishing}
-          >
-            {publishing ? "발행 중..." : "선택한 채널로 발행하기"}
-          </button>
         </section>
-
-        <div className="flex justify-between text-xs">
-          <Link href="/" className="text-blue-600 underline">
-            홈으로
-          </Link>
-          <Link href="/drafts/new" className="text-blue-600 underline">
-            새 초안 만들기
-          </Link>
-        </div>
       </div>
-    </main>
+
+      <section style={{ textAlign: "left", marginTop: 8 }}>
+        <h2 className="form-label">발행 설정</h2>
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            fontSize: 13,
+            marginBottom: 6,
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="checkbox"
+              checked={publishToNaver}
+              onChange={(e) => setPublishToNaver(e.target.checked)}
+            />
+            네이버 블로그
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="checkbox"
+              checked={publishToInstagram}
+              onChange={(e) => setPublishToInstagram(e.target.checked)}
+            />
+            인스타그램
+          </label>
+        </div>
+        {publishError && <p className="error-text">{publishError}</p>}
+        {publishSuccess && <p className="success-text">{publishSuccess}</p>}
+      </section>
+
+      <button
+        type="button"
+        className="app-primary-btn"
+        onClick={handlePublish}
+        disabled={publishing}
+      >
+        {publishing ? "발행 중..." : "선택한 채널로 발행하기"}
+      </button>
+
+      <div className="app-link-row">
+        <Link href="/">홈으로</Link> ·{" "}
+        <Link href="/drafts/new">새 초안 만들기</Link>
+      </div>
+    </div>
   );
 }
 

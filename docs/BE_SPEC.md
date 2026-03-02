@@ -34,8 +34,9 @@
   - Tesseract를 사용한 영수증 텍스트 추출
 
 - `app/services/llm.py`
-  - LLM API 호출 래퍼
+  - LLM API(Gemini generateContent) 호출 래퍼
   - 프롬프트 구성/응답 파싱
+  - 네이버 블로그용 제목/본문/해시태그와 인스타그램용 캡션/해시태그를 한 번에 생성
 
 - `app/services/social/naver_blog.py`
   - 네이버 블로그 API 연동

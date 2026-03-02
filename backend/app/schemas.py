@@ -16,6 +16,7 @@ class DraftCreateData(BaseModel):
     restaurant_name: Optional[str] = None
     blog_title: str
     blog_body: str
+    blog_hashtags: List[str]
     instagram_caption: str
     instagram_hashtags: List[str]
 
@@ -44,6 +45,7 @@ class DraftDetail(BaseModel):
     visit_datetime: Optional[str] = None
     blog_title: str
     blog_body: str
+    blog_hashtags: List[str]
     instagram_caption: str
     instagram_hashtags: List[str]
     media: List[MediaItem]

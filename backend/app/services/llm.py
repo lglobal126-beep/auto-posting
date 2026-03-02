@@ -123,37 +123,37 @@ def generate_post_from_context(
 
     logger.info("LLM CONTENT: %s", content)
 
-    # 마커 기반 대신 단순 파싱: 전체를 블로그 본문으로, 첫 줄을 제목으로 사용
-    full_text = content.strip()
-    lines = [ln.strip() for ln in full_text.splitlines() if ln.strip()]
-    if lines:
-        blog_title = lines[0][:80]
-    else:
-        blog_title = "임시 제목"
+    # 마커 기반 파싱
+    blog_title = _extract_between(content, "[BLOG_TITLE]", "[/BLOG_TITLE]") or "임시 제목"
+    blog_body = _extract_between(content, "[BLOG_BODY]", "[/BLOG_BODY]") or content.strip()
+    blog_hashtags_block = _extract_between(
+        content, "[BLOG_HASHTAGS]", "[/BLOG_HASHTAGS]"
+    ) or ""
+    insta_caption = (
+        _extract_between(content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]") or "임시 인스타 캡션"
+    )
+    insta_hashtags_block = (
+        _extract_between(content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]") or ""
+    )
 
-    blog_body = full_text
+    def _extract_hashtags(block: str) -> list[str]:
+        tokens = block.replace("\n", " ").split(" ")
+        tags = [
+            t.strip()
+            for t in tokens
+            if t.strip().startswith("#") and len(t.strip()) > 1
+        ]
+        return tags
 
-    # 인스타 캡션은 본문의 앞부분 일부를 사용
-    if len(full_text) > 200:
-        instagram_caption = full_text[:200] + "..."
-    else:
-        instagram_caption = full_text
-
-    # 해시태그는 LLM이 본문에 포함한 #태그를 그대로 추출
-    tokens = full_text.replace("\n", " ").split(" ")
-    hashtags = [
-        t.strip()
-        for t in tokens
-        if t.strip().startswith("#") and len(t.strip()) > 1
-    ]
-    if not hashtags:
-        hashtags = ["#맛집", "#리뷰"]
+    blog_hashtags = _extract_hashtags(blog_hashtags_block) or ["#맛집", "#블로그"]
+    insta_hashtags = _extract_hashtags(insta_hashtags_block) or ["#맛집", "#리뷰"]
 
     return {
-        "blog_title": blog_title,
-        "blog_body": blog_body,
-        "instagram_caption": instagram_caption,
-        "instagram_hashtags": hashtags,
+        "blog_title": blog_title.strip(),
+        "blog_body": blog_body.strip(),
+        "blog_hashtags": blog_hashtags,
+        "instagram_caption": insta_caption.strip(),
+        "instagram_hashtags": insta_hashtags,
     }
 
 
@@ -169,39 +169,53 @@ def build_prompt(
     keywords_str = ", ".join(keywords or [])
 
     return f"""
-다음 정보를 바탕으로 맛집 리뷰와 인스타그램 캡션을 작성하세요.
+역할: 당신은 네이버 블로그 파워블로거이자 인스타그램 맛집 인플루언서입니다.
+톤: 네이버는 정보성 + 친근한 존댓말, 인스타는 짧고 임팩트 있게.
 
-[식당 기본 정보]
+[입력 정보]
 - 식당 이름(추정): {restaurant_name or "알 수 없음"}
-
-[영수증 OCR 텍스트]
+- 영수증 OCR 텍스트:
 {ocr_text}
 
-[네이버 리뷰 텍스트들]
+- 네이버 리뷰 텍스트들:
 {reviews_joined}
 
-[사용자 메모]
+- 사용자 메모:
 {user_memo or "메모 없음"}
 
-[사용자 키워드]
+- 사용자 키워드:
 {keywords_str or "키워드 없음"}
 
-출력 형식은 아래 마커를 반드시 포함해서 작성하세요:
+아래 형식을 반드시 지켜서 출력하세요.
 
 [BLOG_TITLE]
-여기에 네이버 블로그 글 제목 한 줄
+네이버 블로그에 바로 쓸 수 있는 제목 1줄
 [/BLOG_TITLE]
 
 [BLOG_BODY]
-여기에 네이버 블로그 본문. 운영시간, 주차, 편의시설, 분위기, 인기 메뉴 등을 리뷰와 정보를 바탕으로 자연스럽게 서술하세요. 과장 광고는 피하고 솔직한 후기 스타일의 존댓말을 사용하세요.
+네이버 블로그에 바로 올릴 수 있는 완성된 본문을 작성하세요.
+- 1단락: 방문 계기, 누구와 갔는지, 전체적인 첫인상
+- 2단락: 위치, 접근성, 영업시간, 주차, 예약/대기 정보 (알 수 없는 정보는 리뷰에서 느껴지는 분위기 위주로 부드럽게 언급)
+- 3~4단락: 주문한 메뉴 각각에 대한 맛, 양, 가격 대비 만족도, 추천/비추천 포인트
+- 마지막 단락: 이런 사람에게 추천, 재방문 의사, 과하지 않은 자연스러운 마무리 멘트
+네이버 블로그 문단 형식으로 줄바꿈과 말투를 잘 맞춰주세요.
 [/BLOG_BODY]
 
+[BLOG_HASHTAGS]
+네이버 블로그용 해시태그를 공백으로 구분하여 15~25개 정도 작성하세요.
+예: #지역명맛집 #메뉴명맛집 #가게이름 #데이트코스 #회식장소 #먹스타그램
+[/BLOG_HASHTAGS]
+
 [INSTA_CAPTION]
-여기에 인스타그램 캡션 2~4문장 정도. 핵심만 담고 자연스럽게 작성하세요.
+인스타그램용 캡션을 2~4문장으로 작성하세요.
+- 첫 문장은 가게의 핵심 포인트를 한 줄로 요약
+- 나머지 문장은 분위기/메뉴/상황을 짧게 언급
+모바일에서 바로 읽기 좋게 너무 길지 않게 작성하세요.
 [/INSTA_CAPTION]
 
 [INSTA_HASHTAGS]
-여기에 인스타그램 해시태그 10~15개를 한 줄 또는 두 줄에 나눠서 적으세요. 예: #강남맛집 #곱창맛집 #퇴근후한잔
+인스타그램용 해시태그를 공백으로 구분하여 10~20개 작성하세요.
+예: #지역명맛집 #메뉴명 #가게이름 #오늘뭐먹지 #instafood #먹스타그램
 [/INSTA_HASHTAGS]
     """.strip()
 

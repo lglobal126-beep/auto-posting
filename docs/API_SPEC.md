@@ -85,6 +85,11 @@
     "restaurant_name": "강남곱창",
     "blog_title": "강남역 곱창 맛집, 기름 대신 담백함으로 승부한 곳",
     "blog_body": "...본문 내용...",
+    "blog_hashtags": [
+      "#강남맛집",
+      "#곱창맛집",
+      "#데이트코스"
+    ],
     "instagram_caption": "퇴근 후 한 잔 하기 딱 좋은 곱창집...",
     "instagram_hashtags": [
       "#강남맛집",
@@ -138,6 +143,11 @@
     "visit_datetime": "2026-03-01T19:30:00Z",
     "blog_title": "강남역 곱창 맛집, 기름 대신 담백함으로 승부한 곳",
     "blog_body": "...본문 내용...",
+    "blog_hashtags": [
+      "#강남맛집",
+      "#곱창맛집",
+      "#데이트코스"
+    ],
     "instagram_caption": "퇴근 후 한 잔 하기 딱 좋은 곱창집...",
     "instagram_hashtags": [
       "#강남맛집",

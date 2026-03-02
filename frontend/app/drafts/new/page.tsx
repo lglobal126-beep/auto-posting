@@ -113,73 +113,75 @@ export default function NewDraftPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center px-4 py-6">
-      <div className="w-full max-w-md space-y-6">
-        <h1 className="text-xl font-bold text-center">새 포스팅 만들기</h1>
+    <div className="app-card">
+      <div className="app-card-header">
+        <div className="app-icon-circle">📝</div>
+        <h1 className="app-title">새 포스팅 만들기</h1>
+        <p className="app-subtitle">
+          방문한 식당의 사진과 영수증만 올리면 블로그 글과 인스타 캡션이 자동으로
+          생성됩니다.
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold">사진 / 영상 / 영수증</h2>
-            <p className="text-xs text-gray-500">
-              파일명에 &quot;receipt&quot; 또는 &quot;영수증&quot;이 포함된
-              파일은 영수증으로 인식됩니다.
-            </p>
+      <form onSubmit={handleSubmit} className="two-column">
+        <div>
+          <div className="form-field">
+            <label className="form-label">사진 / 영상 / 영수증</label>
             <input
               type="file"
               multiple
-              className="text-xs"
               onChange={handleFileChange}
+              className="form-input"
             />
-          </section>
+            <p className="form-help">
+              파일명에 &quot;receipt&quot; 또는 &quot;영수증&quot;이 포함된
+              파일은 영수증으로 인식됩니다.
+            </p>
+          </div>
+        </div>
 
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold">방문 메모</h2>
+        <div>
+          <div className="form-field">
+            <label className="form-label">방문 메모</label>
             <textarea
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              rows={4}
+              className="form-textarea"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="맛, 서비스, 분위기, 누구와 갔는지 등 자유롭게 적어주세요."
             />
-          </section>
+          </div>
 
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold">키워드 (선택)</h2>
-            <p className="text-xs text-gray-500">
-              식당 분위기나 강조하고 싶은 포인트를 콤마로 구분해서 적어주세요.
-              (예: 강남역, 곱창, 퇴근 후 한 잔, 조용한 분위기)
-            </p>
+          <div className="form-field">
+            <label className="form-label">키워드 (선택)</label>
             <input
               type="text"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              className="form-input"
               placeholder="예: 강남역, 곱창, 퇴근 후 한 잔"
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
             />
-          </section>
-
-          {error && (
-            <p className="text-xs text-red-600">
-              {error}
+            <p className="form-help">
+              식당 분위기나 강조하고 싶은 포인트를 콤마로 구분해서 적어주세요.
             </p>
-          )}
-
-          <button
-            type="submit"
-            className="w-full py-2 rounded-md bg-black text-white text-center text-sm disabled:opacity-60"
-            disabled={loading}
-          >
-            {loading ? "업로드 중..." : "AI로 초안 생성하기"}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <Link href="/" className="text-xs text-blue-600 underline">
-            홈으로 돌아가기
-          </Link>
+          </div>
         </div>
+      </form>
+
+      {error && <p className="error-text">{error}</p>}
+
+      <button
+        type="button"
+        className="app-primary-btn"
+        onClick={(e) => handleSubmit(e as any)}
+        disabled={loading}
+      >
+        {loading ? "AI가 글을 작성 중입니다..." : "AI로 초안 생성하기"}
+      </button>
+
+      <div className="app-link-row">
+        <Link href="/">홈으로 돌아가기</Link>
       </div>
-    </main>
+    </div>
   );
 }
 

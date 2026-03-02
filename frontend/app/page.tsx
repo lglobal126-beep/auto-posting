@@ -1,34 +1,39 @@
-"use client";
-
 import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-6">
-        <h1 className="text-2xl font-bold text-center">
-          맛집 인플루언서 자동 포스팅
-        </h1>
-        <p className="text-center text-sm text-gray-600">
-          사진·영상·영수증만 업로드하면 네이버 블로그 글과 인스타그램 캡션을
-          자동으로 만들어주는 도우미입니다.
+    <div className="app-card">
+      <div className="app-card-header">
+        <div className="app-icon-circle">🍽️</div>
+        <h1 className="app-title">맛집 인플루언서 자동 포스팅</h1>
+        <p className="app-subtitle">
+          사진·영상·영수증만 올리면 네이버 블로그와 인스타그램 포스팅이 한 번에
+          완성돼요.
         </p>
-        <div className="flex flex-col gap-3">
-          <Link
-            href="/login"
-            className="w-full py-2 rounded-md bg-black text-white text-center"
-          >
-            로그인하기
-          </Link>
-          <Link
-            href="/drafts/new"
-            className="w-full py-2 rounded-md border border-gray-300 text-center"
-          >
-            새 포스팅 만들기
-          </Link>
-        </div>
       </div>
-    </main>
+
+      <div className="app-steps">
+        <div className="app-steps-title">
+          <span>사용 방법</span>
+        </div>
+        <ol className="app-steps-list">
+          <li>1. 식당 사진·영상·영수증을 업로드합니다.</li>
+          <li>2. 키워드를 간단히 적고 AI로 초안을 생성합니다.</li>
+          <li>3. 네이버 블로그와 인스타그램에 바로 발행합니다.</li>
+        </ol>
+      </div>
+
+      <Link href="/drafts/new">
+        <button className="app-primary-btn">ZIP 파일 선택 및 병합 시작</button>
+      </Link>
+
+      <div className="app-link-row">
+        이미 계정이 있다면{" "}
+        <Link href="/login">
+          로그인하기
+        </Link>
+      </div>
+    </div>
   );
 }
 
