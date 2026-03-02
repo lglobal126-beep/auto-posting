@@ -90,5 +90,17 @@
 - `GET /oauth/instagram/callback`
   - 인스타 OAuth 콜백, 토큰 저장
 
+## 5. 배포 개요 (실 서비스 기준)
+
+- **호스팅**: Render 무료 Web Service
+- **설정 파일**: 루트 `render.yaml`
+  - `rootDir: backend`
+  - `buildCommand: pip install -r requirements.txt`
+  - `startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000`
+- **환경 변수 (Render 대시보드에서 설정)**
+  - `LLM_API_URL`, `LLM_API_KEY`
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+
+
 세부 요청/응답 스키마는 `API_SPEC.md`에서 정의한다.
 

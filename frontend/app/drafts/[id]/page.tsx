@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
+import { supabase } from "@/lib/supabaseClient";
+
 type DraftDetailData = {
   id: number;
   restaurant_name?: string | null;
@@ -21,6 +23,11 @@ export default function DraftDetailPage() {
   const [data, setData] = useState<DraftDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+  const [publishToNaver, setPublishToNaver] = useState(true);
+  const [publishToInstagram, setPublishToInstagram] = useState(true);
 
   useEffect(() => {
     const fetchDraft = async () => {
@@ -47,6 +54,55 @@ export default function DraftDetailPage() {
       fetchDraft();
     }
   }, [id]);
+
+  const handlePublish = async () => {
+    if (!data) return;
+    setPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(null);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        throw new Error("로그인 세션이 유효하지 않습니다. 다시 로그인해주세요.");
+      }
+
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+      if (!apiBase) {
+        throw new Error("백엔드 API 주소가 설정되지 않았습니다.");
+      }
+
+      const res = await fetch(`${apiBase}/posts/publish`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          draft_id: data.id,
+          publish_to_naver: publishToNaver,
+          publish_to_instagram: publishToInstagram,
+          scheduled_at: null,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("발행 요청에 실패했습니다.");
+      }
+
+      const json = await res.json();
+      setPublishSuccess("발행 요청이 완료되었습니다.");
+      console.log("발행 결과:", json);
+    } catch (err: any) {
+      setPublishError(err.message ?? "발행 중 오류가 발생했습니다.");
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -97,6 +153,43 @@ export default function DraftDetailPage() {
             )}
           </div>
         </section>
+
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold">발행 설정</h2>
+          <div className="flex items-center gap-4 text-sm">
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={publishToNaver}
+                onChange={(e) => setPublishToNaver(e.target.checked)}
+              />
+              네이버 블로그
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={publishToInstagram}
+                onChange={(e) => setPublishToInstagram(e.target.checked)}
+              />
+              인스타그램
+            </label>
+          </div>
+          {publishError && (
+            <p className="text-xs text-red-600">{publishError}</p>
+          )}
+          {publishSuccess && (
+            <p className="text-xs text-green-600">{publishSuccess}</p>
+          )}
+          <button
+            type="button"
+            className="mt-2 w-full py-2 rounded-md bg-black text-white text-center text-sm disabled:opacity-60"
+            onClick={handlePublish}
+            disabled={publishing}
+          >
+            {publishing ? "발행 중..." : "선택한 채널로 발행하기"}
+          </button>
+        </section>
+
         <div className="flex justify-between text-xs">
           <Link href="/" className="text-blue-600 underline">
             홈으로
@@ -109,4 +202,5 @@ export default function DraftDetailPage() {
     </main>
   );
 }
+
 
