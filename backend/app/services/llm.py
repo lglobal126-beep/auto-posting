@@ -54,6 +54,8 @@ def generate_post_from_context(
             },
         ],
         "temperature": 0.7,
+        # 최신 OpenAI API에서 JSON 전용 응답을 요청
+        "response_format": {"type": "json_object"},
     }
 
     try:
@@ -62,7 +64,18 @@ def generate_post_from_context(
         raw = resp.json()
         content = raw["choices"][0]["message"]["content"]
 
-        parsed = json.loads(content)
+        # 1차: 그대로 JSON 파싱 시도
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            # 2차: 텍스트 안에서 JSON 객체 부분만 추출해 재시도
+            start = content.find("{")
+            end = content.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                snippet = content[start : end + 1]
+                parsed = json.loads(snippet)
+            else:
+                raise
 
         return {
             "blog_title": parsed.get("blog_title", "임시 제목"),
