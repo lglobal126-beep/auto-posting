@@ -123,25 +123,36 @@ def generate_post_from_context(
 
     logger.info("LLM CONTENT: %s", content)
 
-    blog_title = _extract_between(content, "[BLOG_TITLE]", "[/BLOG_TITLE]") or "임시 제목"
-    blog_body = _extract_between(content, "[BLOG_BODY]", "[/BLOG_BODY]") or "임시 본문"
-    insta_caption = (
-        _extract_between(content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]") or "임시 인스타 캡션"
-    )
-    hashtags_block = (
-        _extract_between(content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]") or ""
-    )
+    # 마커 기반 대신 단순 파싱: 전체를 블로그 본문으로, 첫 줄을 제목으로 사용
+    full_text = content.strip()
+    lines = [ln.strip() for ln in full_text.splitlines() if ln.strip()]
+    if lines:
+        blog_title = lines[0][:80]
+    else:
+        blog_title = "임시 제목"
 
+    blog_body = full_text
+
+    # 인스타 캡션은 본문의 앞부분 일부를 사용
+    if len(full_text) > 200:
+        instagram_caption = full_text[:200] + "..."
+    else:
+        instagram_caption = full_text
+
+    # 해시태그는 LLM이 본문에 포함한 #태그를 그대로 추출
+    tokens = full_text.replace("\n", " ").split(" ")
     hashtags = [
-        token
-        for token in hashtags_block.replace("\n", " ").split(" ")
-        if token.strip().startswith("#")
-    ] or ["#맛집", "#임시"]
+        t.strip()
+        for t in tokens
+        if t.strip().startswith("#") and len(t.strip()) > 1
+    ]
+    if not hashtags:
+        hashtags = ["#맛집", "#리뷰"]
 
     return {
-        "blog_title": blog_title.strip(),
-        "blog_body": blog_body.strip(),
-        "instagram_caption": insta_caption.strip(),
+        "blog_title": blog_title,
+        "blog_body": blog_body,
+        "instagram_caption": instagram_caption,
         "instagram_hashtags": hashtags,
     }
 
