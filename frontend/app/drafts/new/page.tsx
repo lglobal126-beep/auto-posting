@@ -12,6 +12,16 @@ type UploadFileWithType = {
   type: "image" | "video" | "receipt";
 };
 
+type DraftPreview = {
+  draft_id: number;
+  restaurant_name?: string | null;
+  blog_title: string;
+  blog_body: string;
+  blog_hashtags: string[];
+  instagram_caption: string;
+  instagram_hashtags: string[];
+};
+
 export default function NewDraftPage() {
   const router = useRouter();
   const { checking } = useRequireAuth();
@@ -20,6 +30,7 @@ export default function NewDraftPage() {
   const [keywords, setKeywords] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DraftPreview | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -105,7 +116,9 @@ export default function NewDraftPage() {
       console.log("초안 생성 결과:", result);
 
       if (result?.data?.draft_id) {
-        router.push(`/drafts/${result.data.draft_id}`);
+        setPreview(result.data as DraftPreview);
+      } else {
+        throw new Error("초안 생성 결과를 해석하지 못했습니다.");
       }
     } catch (err: any) {
       setError(err.message ?? "업로드 중 오류가 발생했습니다.");
@@ -187,6 +200,70 @@ export default function NewDraftPage() {
       >
         {loading ? "AI가 글을 작성 중입니다..." : "AI로 초안 생성하기"}
       </button>
+
+      {preview && (
+        <div style={{ marginTop: 24 }}>
+          <div className="two-column" style={{ marginBottom: 20 }}>
+            <section>
+              <h2 className="form-label">네이버 블로그용 포스팅</h2>
+              <div className="form-textarea" style={{ minHeight: 160 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                  {preview.blog_title}
+                </div>
+                <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
+                  {preview.blog_body}
+                </div>
+                {preview.blog_hashtags?.length > 0 && (
+                  <div
+                    style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}
+                  >
+                    {preview.blog_hashtags.join(" ")}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="form-label">인스타그램용 포스팅</h2>
+              <div className="form-textarea" style={{ minHeight: 160 }}>
+                <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
+                  {preview.instagram_caption}
+                </div>
+                {preview.instagram_hashtags?.length > 0 && (
+                  <div
+                    style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}
+                  >
+                    {preview.instagram_hashtags.join(" ")}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <div className="app-link-row">
+            <span>네이버·인스타 에디터에 그대로 복사해서 붙여넣으면 됩니다.</span>
+            {preview.draft_id && (
+              <>
+                {" "}
+                ·{" "}
+                <button
+                  type="button"
+                  onClick={() => router.push(`/drafts/${preview.draft_id}`)}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "#2563eb",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  상세 화면에서 보기
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="app-link-row">
         <Link href="/">홈으로 돌아가기</Link>
