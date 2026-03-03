@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 개발 및 소규모 개인용 → 전부 허용
+        allow_origins=["https://auto-posting-sigma.vercel.app"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
