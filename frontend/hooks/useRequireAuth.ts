@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-
 import { supabase } from "@/lib/supabaseClient";
 
 export function useRequireAuth() {
@@ -23,9 +22,8 @@ export function useRequireAuth() {
       }
     };
 
-    void checkSession();
+    checkSession();
   }, [router, pathname]);
 
   return { checking };
 }
-
