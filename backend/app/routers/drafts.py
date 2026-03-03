@@ -57,6 +57,7 @@ async def create_draft(payload: DraftCreateRequest) -> ApiResponse:
         restaurant_name=restaurant_name,
         blog_title=llm_result["blog_title"],
         blog_body=llm_result["blog_body"],
+        blog_hashtags=llm_result.get("blog_hashtags", []),
         instagram_caption=llm_result["instagram_caption"],
         instagram_hashtags=llm_result["instagram_hashtags"],
     )
@@ -86,6 +87,7 @@ async def get_draft(draft_id: int) -> ApiResponse:
         visit_datetime=datetime.utcnow().isoformat() + "Z",
         blog_title="예시 제목",
         blog_body="예시 본문입니다.",
+        blog_hashtags=["#예시", "#해시태그"],
         instagram_caption="예시 인스타 캡션입니다.",
         instagram_hashtags=["#예시", "#해시태그"],
         media=[
