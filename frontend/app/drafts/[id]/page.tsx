@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 type DraftDetailData = {
   id: number;
@@ -20,6 +21,7 @@ type DraftDetailData = {
 export default function DraftDetailPage() {
   const params = useParams();
   const id = params?.id as string;
+  const { checking } = useRequireAuth();
 
   const [data, setData] = useState<DraftDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +106,14 @@ export default function DraftDetailPage() {
       setPublishing(false);
     }
   };
+
+  if (checking) {
+    return (
+      <div className="app-card">
+        <p className="app-subtitle">로그인 상태를 확인하는 중입니다...</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

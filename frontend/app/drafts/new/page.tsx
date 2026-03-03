@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 type UploadFileWithType = {
   file: File;
@@ -13,6 +14,7 @@ type UploadFileWithType = {
 
 export default function NewDraftPage() {
   const router = useRouter();
+  const { checking } = useRequireAuth();
   const [files, setFiles] = useState<UploadFileWithType[]>([]);
   const [memo, setMemo] = useState("");
   const [keywords, setKeywords] = useState("");
@@ -111,6 +113,14 @@ export default function NewDraftPage() {
       setLoading(false);
     }
   };
+
+  if (checking) {
+    return (
+      <div className="app-card">
+        <p className="app-subtitle">로그인 상태를 확인하는 중입니다...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-card">

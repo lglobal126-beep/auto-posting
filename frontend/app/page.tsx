@@ -1,6 +1,20 @@
+\"use client\";
+
 import Link from "next/link";
 
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+
 export default function HomePage() {
+  const { checking } = useRequireAuth();
+
+  if (checking) {
+    return (
+      <div className="app-card">
+        <p className="app-subtitle">로그인 상태를 확인하는 중입니다...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="app-card">
       <div className="app-card-header">
@@ -24,15 +38,8 @@ export default function HomePage() {
       </div>
 
       <Link href="/drafts/new">
-        <button className="app-primary-btn">ZIP 파일 선택 및 병합 시작</button>
+        <button className="app-primary-btn">새 포스팅 만들기</button>
       </Link>
-
-      <div className="app-link-row">
-        이미 계정이 있다면{" "}
-        <Link href="/login">
-          로그인하기
-        </Link>
-      </div>
     </div>
   );
 }
