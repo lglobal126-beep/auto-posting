@@ -17,6 +17,7 @@ def generate_post_from_context(
     total_amount: Optional[str],
     user_memo: Optional[str],
     keywords: Optional[List[str]],
+    food_descriptions: Optional[List[str]] = None,
 ) -> dict:
     """
     Gemini API로 네이버 블로그 본문 + 인스타그램 캡션/해시태그를 생성합니다.
@@ -34,6 +35,7 @@ def generate_post_from_context(
         total_amount=total_amount,
         user_memo=user_memo,
         keywords=keywords,
+        food_descriptions=food_descriptions,
     )
 
     url = llm_api_url
@@ -91,6 +93,7 @@ def build_prompt(
     total_amount: Optional[str],
     user_memo: Optional[str],
     keywords: Optional[List[str]],
+    food_descriptions: Optional[List[str]] = None,
 ) -> str:
     menu_str = ""
     if menu_items:
@@ -98,9 +101,14 @@ def build_prompt(
         menu_str = "\n".join(lines)
     keywords_str = ", ".join(keywords or [])
 
+    food_desc_str = ""
+    if food_descriptions:
+        numbered = [f"  {i+1}. {d}" for i, d in enumerate(food_descriptions)]
+        food_desc_str = "\n".join(numbered)
+
     return f"""
 당신은 네이버 블로그 파워블로거이자 인스타그램 맛집 인플루언서입니다.
-아래 식당 정보를 바탕으로 블로그 포스팅과 인스타그램 게시글을 작성해주세요.
+아래 식당 정보와 사진 분석 결과를 바탕으로 블로그 포스팅과 인스타그램 게시글을 작성해주세요.
 
 ━━━ 식당 정보 ━━━
 - 상호명: {restaurant_name or "알 수 없음"}
@@ -112,22 +120,31 @@ def build_prompt(
 - 방문 메모: {user_memo or "메모 없음"}
 - 강조 키워드: {keywords_str or "없음"}
 
+━━━ 음식 사진 분석 결과 (사진 순서대로) ━━━
+{food_desc_str or "  (사진 정보 없음)"}
+
 ━━━ 네이버 블로그 작성 기준 ━━━
-• 파워블로거 특유의 친근하고 정보성 있는 존댓말 문체
-• 제목: "[가게명] | [지역] 맛집 | [메뉴/분위기] 솔직 후기" 형식으로 검색 최적화
-• 본문 구성:
-  1단락) 방문 계기 + 첫인상 (2~3문장, 자연스럽게)
-  2단락) 위치·영업시간·주차·예약 등 실용 정보 (주소 정보 활용)
-  3~4단락) 메뉴별 상세 후기 - 맛·양·가격 대비 만족도·추천 포인트 (구체적으로)
-  마지막 단락) 총평 + 재방문 의사 + 이런 분께 추천 (자연스러운 마무리)
-• 각 단락은 빈 줄로 구분
-• 군더더기 없이 실제 블로그에 바로 게시할 수 있는 완성된 글
+• 글의 첫 문장은 반드시 "안녕하세요 여러분! 접니다." 로 시작할 것
+• 파워블로거 특유의 친근하고 따뜻한 존댓말 문체 (딱딱하지 않게, 마치 친한 언니/오빠가 알려주는 느낌)
+• 이모지를 단락 시작마다 자연스럽게 1~2개 활용 (🍖🔥✨😋👍 등)
+• 제목: "[가게명] 맛집 | [메뉴 or 분위기] 솔직후기 🍴" 형식으로 검색 최적화
+• 본문 구성 (아래 순서 엄수):
+  ① 인사 + 방문 계기 + 첫인상 (2~3문장)
+  ② 위치·주차·분위기 등 실용 정보 (주소 활용, 찾아가기 쉽게)
+  ③ 음식별 상세 후기 — 사진 분석 결과를 적극 활용해 각 음식마다 독립 단락으로 작성
+     · 음식 이름을 소제목처럼 굵게 강조 (예: ✨ 돼지껍데기)
+     · 색감·식감·맛·양·가격 대비 만족도를 구체적으로 묘사
+     · 실제 먹어본 사람의 솔직한 감상 포함
+  ④ 밑반찬/소스류 언급 (간략히, 서비스 수준 평가)
+  ⑤ 총평 + 재방문 의사 + 추천 대상 (따뜻하게 마무리)
+• 각 단락은 빈 줄로 구분, 총 글자 수 800~1500자 내외
+• 영수증 이미지는 글에 언급하지 말 것
 
 ━━━ 인스타그램 작성 기준 ━━━
 • 첫 줄: 핵심 후크 문장 (이모지 포함, 임팩트 있게)
-• 2~3줄: 분위기·메뉴·상황 간단 언급
-• 감성적이고 짧게, 모바일 읽기 좋게
-• 이모지를 자연스럽게 사용 (과하지 않게)
+• 2~4줄: 가장 인상 깊었던 메뉴 1~2개 감성적으로 표현
+• 모바일에서 읽기 좋게 줄바꿈 적극 활용
+• 이모지 자연스럽게 사용
 
 ━━━ 출력 형식 (반드시 아래 태그를 정확하게 사용) ━━━
 
@@ -136,21 +153,17 @@ def build_prompt(
 [/BLOG_TITLE]
 
 [BLOG_BODY]
-단락1
+안녕하세요 여러분! 접니다.
 
-단락2
-
-단락3~4
-
-마지막 단락
+(이후 본문 계속)
 [/BLOG_BODY]
 
 [BLOG_HASHTAGS]
-#해시태그1 #해시태그2 ... (15~25개, #지역맛집 #가게이름 #메뉴명 형식)
+#해시태그1 #해시태그2 ... (15~25개)
 [/BLOG_HASHTAGS]
 
 [INSTA_CAPTION]
-캡션 (2~4줄, 이모지 포함)
+캡션 (3~5줄, 이모지 포함)
 [/INSTA_CAPTION]
 
 [INSTA_HASHTAGS]

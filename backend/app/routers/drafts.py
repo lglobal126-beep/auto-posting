@@ -13,7 +13,10 @@ from app.schemas import (
     ReceiptInfo,
 )
 from app.services import database as db
-from app.services.receipt_analyzer import download_from_supabase_and_analyze
+from app.services.receipt_analyzer import (
+    download_from_supabase_and_analyze,
+    analyze_food_photos_from_supabase,
+)
 from app.services.llm import generate_post_from_context
 
 router = APIRouter()
@@ -40,10 +43,11 @@ async def create_draft(
     llm_api_key = os.getenv("LLM_API_KEY", "")
     supabase_url = os.getenv("SUPABASE_URL", "")
 
+    supabase_client = db.get_supabase()
+
     # 1) 영수증 Gemini Vision OCR
     receipt_data: dict = {}
     if payload.receipt_path:
-        supabase_client = db.get_supabase()
         receipt_data = download_from_supabase_and_analyze(
             supabase_client=supabase_client,
             bucket="media",
@@ -51,6 +55,18 @@ async def create_draft(
             api_key=llm_api_key,
             api_url=llm_api_url,
         )
+
+    # 2) 음식 사진별 상세 설명 (영수증 제외한 image_paths만)
+    food_photo_results = []
+    if payload.image_paths:
+        food_photo_results = analyze_food_photos_from_supabase(
+            supabase_client=supabase_client,
+            bucket="media",
+            paths=payload.image_paths,
+            api_key=llm_api_key,
+            api_url=llm_api_url,
+        )
+    food_descriptions = [r["description"] for r in food_photo_results]
 
     restaurant_name = receipt_data.get("restaurant_name") or None
     address = receipt_data.get("address") or None
@@ -66,7 +82,7 @@ async def create_draft(
         visit_date=receipt_data.get("visit_date"),
     ) if receipt_data else None
 
-    # 2) LLM 호출
+    # 3) LLM 호출 (음식 사진 설명 포함)
     llm_result = generate_post_from_context(
         llm_api_url=llm_api_url,
         llm_api_key=llm_api_key,
@@ -77,9 +93,10 @@ async def create_draft(
         total_amount=total_amount,
         user_memo=payload.memo,
         keywords=payload.keywords,
+        food_descriptions=food_descriptions,
     )
 
-    # 3) DB 저장
+    # 4) DB 저장
     row = db.create_draft(user_id, {
         "restaurant_name": restaurant_name,
         "address": address,
