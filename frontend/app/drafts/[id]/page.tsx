@@ -3,19 +3,28 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
 import { supabase } from "@/lib/supabaseClient";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 
-type DraftDetailData = {
-  id: number;
+type ReceiptInfo = {
   restaurant_name?: string | null;
-  visit_datetime?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  menu_items?: { name: string; price: string }[] | null;
+  total_amount?: string | null;
+};
+
+type DraftDetailData = {
+  id: string;
+  restaurant_name?: string | null;
+  address?: string | null;
+  receipt_info?: ReceiptInfo | null;
   blog_title: string;
   blog_body: string;
   blog_hashtags: string[];
   instagram_caption: string;
   instagram_hashtags: string[];
+  image_paths?: string[];
 };
 
 export default function DraftDetailPage() {
@@ -26,111 +35,104 @@ export default function DraftDetailPage() {
   const [data, setData] = useState<DraftDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
-  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
-  const [publishToNaver, setPublishToNaver] = useState(true);
-  const [publishToInstagram, setPublishToInstagram] = useState(true);
+
+  // 편집 상태
+  const [blogTitle, setBlogTitle] = useState("");
+  const [blogBody, setBlogBody] = useState("");
+  const [blogHashtags, setBlogHashtags] = useState("");
+  const [instaCaption, setInstaCaption] = useState("");
+  const [instaHashtags, setInstaHashtags] = useState("");
+
+  // 저장 상태
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  const [copied, setCopied] = useState<"blog" | "insta" | null>(null);
 
   useEffect(() => {
     const fetchDraft = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
         const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-        if (!apiBase) {
-          throw new Error("백엔드 API 주소가 설정되지 않았습니다.");
-        }
-
-        const res = await fetch(`${apiBase}/drafts/${id}`);
-        if (!res.ok) {
-          throw new Error("초안 정보를 불러오지 못했습니다.");
-        }
+        const res = await fetch(`${apiBase}/drafts/${id}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) throw new Error("초안 정보를 불러오지 못했습니다.");
         const json = await res.json();
-        setData(json.data);
-      } catch (err: any) {
-        setError(err.message ?? "불러오기 중 오류가 발생했습니다.");
+        const d = json.data as DraftDetailData;
+        setData(d);
+        setBlogTitle(d.blog_title || "");
+        setBlogBody(d.blog_body || "");
+        setBlogHashtags((d.blog_hashtags || []).join(" "));
+        setInstaCaption(d.instagram_caption || "");
+        setInstaHashtags((d.instagram_hashtags || []).join(" "));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
+        setError(msg);
       } finally {
         setLoading(false);
       }
     };
+    if (id && !checking) fetchDraft();
+  }, [id, checking]);
 
-    if (id) {
-      fetchDraft();
-    }
-  }, [id]);
-
-  const handlePublish = async () => {
-    if (!data) return;
-    setPublishing(true);
-    setPublishError(null);
-    setPublishSuccess(null);
-
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg(null);
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session?.access_token) {
-        throw new Error("로그인 세션이 유효하지 않습니다. 다시 로그인해주세요.");
-      }
-
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("세션이 만료되었습니다.");
       const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-      if (!apiBase) {
-        throw new Error("백엔드 API 주소가 설정되지 않았습니다.");
-      }
-
-      const res = await fetch(`${apiBase}/posts/publish`, {
-        method: "POST",
+      const res = await fetch(`${apiBase}/drafts/${id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          draft_id: data.id,
-          publish_to_naver: publishToNaver,
-          publish_to_instagram: publishToInstagram,
-          scheduled_at: null,
+          blog_title: blogTitle,
+          blog_body: blogBody,
+          blog_hashtags: blogHashtags.split(" ").filter((t) => t.startsWith("#")),
+          instagram_caption: instaCaption,
+          instagram_hashtags: instaHashtags.split(" ").filter((t) => t.startsWith("#")),
         }),
       });
-
-      if (!res.ok) {
-        throw new Error("발행 요청에 실패했습니다.");
-      }
-
-      const json = await res.json();
-      setPublishSuccess("발행 요청이 완료되었습니다.");
-      console.log("발행 결과:", json);
-    } catch (err: any) {
-      setPublishError(err.message ?? "발행 중 오류가 발생했습니다.");
+      if (!res.ok) throw new Error("저장에 실패했습니다.");
+      setSaveMsg("저장되었습니다.");
+      setTimeout(() => setSaveMsg(null), 2500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "저장 중 오류";
+      setSaveMsg(`오류: ${msg}`);
     } finally {
-      setPublishing(false);
+      setSaving(false);
     }
   };
 
-  if (checking) {
-    return (
-      <div className="app-card">
-        <p className="app-subtitle">로그인 상태를 확인하는 중입니다...</p>
-      </div>
-    );
-  }
+  const handleCopy = async (type: "blog" | "insta") => {
+    const text =
+      type === "blog"
+        ? `${blogTitle}\n\n${blogBody}\n\n${blogHashtags}`
+        : `${instaCaption}\n\n${instaHashtags}`;
+    await navigator.clipboard.writeText(text);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
-  if (loading) {
+  if (checking || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-gray-600">초안을 불러오는 중입니다...</p>
-      </main>
+      <div className="app-card app-card-sm">
+        <p className="app-subtitle">불러오는 중...</p>
+      </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="app-card">
-        <p className="error-text">
-          {error ?? "초안 정보를 찾을 수 없습니다."}
-        </p>
+      <div className="app-card app-card-sm">
+        <p className="error-text">{error ?? "초안을 찾을 수 없습니다."}</p>
         <div className="app-link-row">
-          <Link href="/">홈으로 돌아가기</Link>
+          <Link href="/drafts">목록으로</Link>
         </div>
       </div>
     );
@@ -138,97 +140,195 @@ export default function DraftDetailPage() {
 
   return (
     <div className="app-card">
-      <div className="app-card-header">
-        <div className="app-icon-circle">📄</div>
-        <h1 className="app-title">
-          {data.blog_title || "제목 없는 초안"}
-        </h1>
+      <div style={{ marginBottom: 20 }}>
+        <h1 className="app-title" style={{ marginBottom: 4 }}>초안 편집 · 발행</h1>
         {data.restaurant_name && (
-          <p className="app-subtitle">
-            식당: {data.restaurant_name}
+          <p className="app-subtitle" style={{ textAlign: "left" }}>
+            🍴 {data.restaurant_name}
+            {data.address && ` · ${data.address}`}
           </p>
         )}
       </div>
 
-      <div className="two-column" style={{ marginBottom: 20 }}>
-        <section>
-          <h2 className="form-label">네이버 블로그용 포스팅</h2>
-          <div className="form-textarea" style={{ minHeight: 160 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>
-              {data.blog_title}
+      {/* 영수증 정보 */}
+      {data.receipt_info && (
+        <div className="receipt-box">
+          <div className="receipt-box-title">🧾 영수증 인식 정보</div>
+          {data.receipt_info.restaurant_name && (
+            <div className="receipt-row">
+              <span className="receipt-label">상호명</span>
+              <span className="receipt-value">{data.receipt_info.restaurant_name}</span>
             </div>
-            <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
-              {data.blog_body}
+          )}
+          {data.receipt_info.address && (
+            <div className="receipt-row">
+              <span className="receipt-label">주소</span>
+              <span className="receipt-value">{data.receipt_info.address}</span>
             </div>
-            {data.blog_hashtags?.length > 0 && (
-              <div style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}>
-                {data.blog_hashtags.join(" ")}
-              </div>
-            )}
-          </div>
-        </section>
+          )}
+          {data.receipt_info.phone && (
+            <div className="receipt-row">
+              <span className="receipt-label">전화</span>
+              <span className="receipt-value">{data.receipt_info.phone}</span>
+            </div>
+          )}
+          {data.receipt_info.menu_items && data.receipt_info.menu_items.length > 0 && (
+            <div className="receipt-row">
+              <span className="receipt-label">메뉴</span>
+              <span className="receipt-value">
+                {data.receipt_info.menu_items.map((m) => `${m.name} ${m.price}`).join(" / ")}
+              </span>
+            </div>
+          )}
+          {data.receipt_info.total_amount && (
+            <div className="receipt-row">
+              <span className="receipt-label">합계</span>
+              <span className="receipt-value">{data.receipt_info.total_amount}</span>
+            </div>
+          )}
+        </div>
+      )}
 
-        <section>
-          <h2 className="form-label">인스타그램용 포스팅</h2>
-          <div className="form-textarea" style={{ minHeight: 160 }}>
-            <div style={{ whiteSpace: "pre-line", fontSize: 13 }}>
-              {data.instagram_caption}
-            </div>
-            {data.instagram_hashtags?.length > 0 && (
-              <div style={{ marginTop: 10, fontSize: 11, color: "#4b5563" }}>
-                {data.instagram_hashtags.join(" ")}
-              </div>
-            )}
+      {/* 편집 영역 */}
+      <div className="preview-grid">
+        {/* 네이버 블로그 */}
+        <div className="preview-section">
+          <div className="preview-section-head">
+            <span className="preview-section-title">📗 네이버 블로그</span>
+            <button className="copy-btn" onClick={() => handleCopy("blog")}>
+              {copied === "blog" ? "✓ 복사됨" : "전체 복사"}
+            </button>
           </div>
-        </section>
+          <div style={{ padding: 14 }}>
+            <div className="form-field" style={{ marginBottom: 10 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>제목</label>
+              <input
+                className="form-input"
+                value={blogTitle}
+                onChange={(e) => setBlogTitle(e.target.value)}
+              />
+            </div>
+            <div className="form-field" style={{ marginBottom: 10 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>본문</label>
+              <textarea
+                className="form-textarea"
+                value={blogBody}
+                onChange={(e) => setBlogBody(e.target.value)}
+                style={{ minHeight: 280 }}
+              />
+            </div>
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>해시태그</label>
+              <textarea
+                className="form-textarea"
+                value={blogHashtags}
+                onChange={(e) => setBlogHashtags(e.target.value)}
+                style={{ minHeight: 60, color: "#6366f1" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 인스타그램 */}
+        <div className="preview-section">
+          <div className="preview-section-head">
+            <span className="preview-section-title">📸 인스타그램</span>
+            <button className="copy-btn" onClick={() => handleCopy("insta")}>
+              {copied === "insta" ? "✓ 복사됨" : "전체 복사"}
+            </button>
+          </div>
+          <div style={{ padding: 14 }}>
+            <div className="form-field" style={{ marginBottom: 10 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>캡션</label>
+              <textarea
+                className="form-textarea"
+                value={instaCaption}
+                onChange={(e) => setInstaCaption(e.target.value)}
+                style={{ minHeight: 160 }}
+              />
+            </div>
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>해시태그</label>
+              <textarea
+                className="form-textarea"
+                value={instaHashtags}
+                onChange={(e) => setInstaHashtags(e.target.value)}
+                style={{ minHeight: 100, color: "#6366f1" }}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      <section style={{ textAlign: "left", marginTop: 8 }}>
-        <h2 className="form-label">발행 설정</h2>
+      {/* 저장 */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <button
+          className="app-secondary-btn"
+          onClick={handleSave}
+          disabled={saving}
+          style={{ flex: 1 }}
+        >
+          {saving ? "저장 중..." : "💾 수정 내용 저장"}
+        </button>
+      </div>
+      {saveMsg && (
+        <p className={saveMsg.startsWith("오류") ? "error-text" : "success-text"}>{saveMsg}</p>
+      )}
+
+      <hr className="divider" />
+
+      {/* 네이버 블로그 - 복사 안내 */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>📗 네이버 블로그 발행</h2>
         <div
           style={{
-            display: "flex",
-            gap: 16,
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 10,
+            padding: "12px 16px",
             fontSize: 13,
-            marginBottom: 6,
+            color: "#166534",
           }}
         >
-          <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              type="checkbox"
-              checked={publishToNaver}
-              onChange={(e) => setPublishToNaver(e.target.checked)}
-            />
-            네이버 블로그
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              type="checkbox"
-              checked={publishToInstagram}
-              onChange={(e) => setPublishToInstagram(e.target.checked)}
-            />
-            인스타그램
-          </label>
+          1. 위 <strong>「전체 복사」</strong> 버튼으로 블로그 내용 복사
+          <br />
+          2.{" "}
+          <a
+            href="https://blog.naver.com/PostWriteForm.naver"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "#16a34a", fontWeight: 600 }}
+          >
+            네이버 블로그 글쓰기 열기 →
+          </a>{" "}
+          에서 붙여넣기
         </div>
-        {publishError && <p className="error-text">{publishError}</p>}
-        {publishSuccess && <p className="success-text">{publishSuccess}</p>}
-      </section>
+      </div>
 
-      <button
-        type="button"
-        className="app-primary-btn"
-        onClick={handlePublish}
-        disabled={publishing}
-      >
-        {publishing ? "발행 중..." : "선택한 채널로 발행하기"}
-      </button>
+      {/* 인스타그램 - 복사 안내 */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>📸 인스타그램 발행</h2>
+        <div
+          style={{
+            background: "#fdf4ff",
+            border: "1px solid #e9d5ff",
+            borderRadius: 10,
+            padding: "12px 16px",
+            fontSize: 13,
+            color: "#6b21a8",
+          }}
+        >
+          1. 위 <strong>「전체 복사」</strong> 버튼으로 캡션+해시태그 복사
+          <br />
+          2. 인스타그램 앱에서 사진 선택 후 붙여넣기
+        </div>
+      </div>
 
       <div className="app-link-row">
-        <Link href="/">홈으로</Link> ·{" "}
-        <Link href="/drafts/new">새 초안 만들기</Link>
+        <Link href="/drafts">목록으로</Link>
+        <span>·</span>
+        <Link href="/drafts/new">새 포스팅</Link>
       </div>
     </div>
   );
 }
-
-

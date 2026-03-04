@@ -1,8 +1,7 @@
-from datetime import datetime
-from typing import List
 import os
+from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 
 from app.schemas import (
     ApiResponse,
@@ -11,96 +10,174 @@ from app.schemas import (
     DraftDetail,
     DraftSummary,
     DraftUpdateRequest,
-    MediaItem,
+    ReceiptInfo,
 )
-from app.services.ocr import extract_restaurant_name, extract_text_from_receipt
-from app.services.naver_search import fetch_naver_reviews
+from app.services import database as db
+from app.services.receipt_analyzer import download_from_supabase_and_analyze
 from app.services.llm import generate_post_from_context
 
 router = APIRouter()
 
 
+def _require_user(authorization: Optional[str]) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="인증 토큰이 필요합니다.")
+    token = authorization.split(" ", 1)[1]
+    user_id = db.get_user_id(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+    return user_id
+
+
 @router.post("", response_model=ApiResponse)
-async def create_draft(payload: DraftCreateRequest) -> ApiResponse:
-    # 1) 영수증 OCR로 상호명 추출 (receipt_path가 있는 경우)
-    ocr_text = ""
-    restaurant_name = None
-    if payload.receipt_path:
-        # 실제 서비스에서는 Supabase Storage에서 파일을 다운로드한 후
-        # 로컬 임시 경로를 넘겨야 합니다. 현재는 예시로만 남깁니다.
-        try:
-            ocr_text = extract_text_from_receipt(payload.receipt_path)
-            restaurant_name = extract_restaurant_name(ocr_text)
-        except Exception:
-            ocr_text = ""
+async def create_draft(
+    payload: DraftCreateRequest,
+    authorization: Optional[str] = Header(None),
+) -> ApiResponse:
+    user_id = _require_user(authorization)
 
-    # 2) 네이버 리뷰 텍스트 수집 (상호명이 있는 경우)
-    naver_reviews: List[str] = []
-    if restaurant_name:
-        naver_reviews = fetch_naver_reviews(restaurant_name)
-
-    # 3) LLM 호출로 블로그/인스타 텍스트 생성
     llm_api_url = os.getenv("LLM_API_URL", "")
     llm_api_key = os.getenv("LLM_API_KEY", "")
+    supabase_url = os.getenv("SUPABASE_URL", "")
+
+    # 1) 영수증 Gemini Vision OCR
+    receipt_data: dict = {}
+    if payload.receipt_path:
+        supabase_client = db.get_supabase()
+        receipt_data = download_from_supabase_and_analyze(
+            supabase_client=supabase_client,
+            bucket="media",
+            path=payload.receipt_path,
+            api_key=llm_api_key,
+            api_url=llm_api_url,
+        )
+
+    restaurant_name = receipt_data.get("restaurant_name") or None
+    address = receipt_data.get("address") or None
+    phone = receipt_data.get("phone") or None
+    menu_items = receipt_data.get("menu_items") or []
+    total_amount = receipt_data.get("total_amount") or None
+    receipt_info = ReceiptInfo(
+        restaurant_name=restaurant_name,
+        address=address,
+        phone=phone,
+        menu_items=menu_items,
+        total_amount=total_amount,
+        visit_date=receipt_data.get("visit_date"),
+    ) if receipt_data else None
+
+    # 2) LLM 호출
     llm_result = generate_post_from_context(
         llm_api_url=llm_api_url,
         llm_api_key=llm_api_key,
         restaurant_name=restaurant_name,
-        ocr_text=ocr_text,
-        naver_reviews=naver_reviews,
+        address=address,
+        phone=phone,
+        menu_items=menu_items,
+        total_amount=total_amount,
         user_memo=payload.memo,
         keywords=payload.keywords,
     )
 
+    # 3) DB 저장
+    row = db.create_draft(user_id, {
+        "restaurant_name": restaurant_name,
+        "address": address,
+        "phone": phone,
+        "receipt_info": receipt_data or None,
+        "image_paths": payload.image_paths,
+        "video_paths": payload.video_paths,
+        "receipt_path": payload.receipt_path,
+        "blog_title": llm_result["blog_title"],
+        "blog_body": llm_result["blog_body"],
+        "blog_hashtags": llm_result["blog_hashtags"],
+        "instagram_caption": llm_result["instagram_caption"],
+        "instagram_hashtags": llm_result["instagram_hashtags"],
+    })
+
+    draft_id = str(row["id"]) if row else "temp"
+
     data = DraftCreateData(
-        draft_id=1,  # TODO: Supabase에 저장 후 실제 ID 사용
+        draft_id=draft_id,
         restaurant_name=restaurant_name,
+        address=address,
+        receipt_info=receipt_info,
         blog_title=llm_result["blog_title"],
         blog_body=llm_result["blog_body"],
         blog_hashtags=llm_result.get("blog_hashtags", []),
         instagram_caption=llm_result["instagram_caption"],
         instagram_hashtags=llm_result["instagram_hashtags"],
     )
-    return ApiResponse(success=True, data=data, error=None)
+    return ApiResponse(success=True, data=data.model_dump())
 
 
 @router.get("", response_model=ApiResponse)
-async def list_drafts() -> ApiResponse:
-    # TODO: Supabase에서 실제 목록 조회
-    summaries: List[DraftSummary] = [
+async def list_drafts(authorization: Optional[str] = Header(None)) -> ApiResponse:
+    user_id = _require_user(authorization)
+    rows = db.list_drafts(user_id)
+    summaries = [
         DraftSummary(
-            id=1,
-            restaurant_name="예시식당",
-            created_at=datetime.utcnow().isoformat() + "Z",
-            status="draft",
-        )
+            id=str(r["id"]),
+            restaurant_name=r.get("restaurant_name"),
+            blog_title=r.get("blog_title"),
+            created_at=r.get("created_at", ""),
+            status=r.get("status", "draft"),
+        ).model_dump()
+        for r in rows
     ]
-    return ApiResponse(success=True, data=summaries, error=None)
+    return ApiResponse(success=True, data=summaries)
 
 
 @router.get("/{draft_id}", response_model=ApiResponse)
-async def get_draft(draft_id: int) -> ApiResponse:
-    # TODO: Supabase에서 실제 상세 조회
+async def get_draft(
+    draft_id: str,
+    authorization: Optional[str] = Header(None),
+) -> ApiResponse:
+    user_id = _require_user(authorization)
+    row = db.get_draft(draft_id, user_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="초안을 찾을 수 없습니다.")
+
+    receipt_info = None
+    if row.get("receipt_info"):
+        ri = row["receipt_info"]
+        receipt_info = ReceiptInfo(
+            restaurant_name=ri.get("restaurant_name"),
+            address=ri.get("address"),
+            phone=ri.get("phone"),
+            menu_items=ri.get("menu_items"),
+            total_amount=ri.get("total_amount"),
+            visit_date=ri.get("visit_date"),
+        )
+
     detail = DraftDetail(
-        id=draft_id,
-        restaurant_name="예시식당",
-        visit_datetime=datetime.utcnow().isoformat() + "Z",
-        blog_title="예시 제목",
-        blog_body="예시 본문입니다.",
-        blog_hashtags=["#예시", "#해시태그"],
-        instagram_caption="예시 인스타 캡션입니다.",
-        instagram_hashtags=["#예시", "#해시태그"],
-        media=[
-            MediaItem(type="image", path="public/user1/img1.jpg"),
-            MediaItem(type="receipt", path="public/user1/receipt1.jpg"),
-        ],
+        id=str(row["id"]),
+        restaurant_name=row.get("restaurant_name"),
+        address=row.get("address"),
+        receipt_info=receipt_info,
+        visit_datetime=row.get("created_at"),
+        blog_title=row.get("blog_title", ""),
+        blog_body=row.get("blog_body", ""),
+        blog_hashtags=row.get("blog_hashtags") or [],
+        instagram_caption=row.get("instagram_caption", ""),
+        instagram_hashtags=row.get("instagram_hashtags") or [],
+        image_paths=row.get("image_paths") or [],
+        video_paths=row.get("video_paths") or [],
     )
-    return ApiResponse(success=True, data=detail, error=None)
+    return ApiResponse(success=True, data=detail.model_dump())
 
 
 @router.patch("/{draft_id}", response_model=ApiResponse)
-async def update_draft(draft_id: int, payload: DraftUpdateRequest) -> ApiResponse:
-    # TODO: Supabase에서 실제 업데이트
-    updated = {"id": draft_id, "updated_at": datetime.utcnow().isoformat() + "Z"}
-    return ApiResponse(success=True, data=updated, error=None)
-
+async def update_draft(
+    draft_id: str,
+    payload: DraftUpdateRequest,
+    authorization: Optional[str] = Header(None),
+) -> ApiResponse:
+    user_id = _require_user(authorization)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="수정할 내용이 없습니다.")
+    updated = db.update_draft(draft_id, user_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="초안을 찾을 수 없습니다.")
+    return ApiResponse(success=True, data={"id": draft_id})

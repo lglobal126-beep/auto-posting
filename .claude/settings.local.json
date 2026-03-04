@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:blog.naver.com)",
+      "WebFetch(domain:www.instagram.com)",
+      "Bash(python3 -c \":*)",
+      "Bash(python -c \"print\\(''test''\\)\")",
+      "Bash(py -c \"print\\(''test''\\)\")",
+      "Bash(py -c \":*)",
+      "Bash(py write_css.py)",
+      "Bash(del write_css.py)",
+      "Bash(py write_frontend.py)",
+      "Bash(python -c \":*)"
+    ]
+  }
+}
