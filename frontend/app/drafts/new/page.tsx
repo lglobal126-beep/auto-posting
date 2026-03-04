@@ -242,8 +242,10 @@ export default function NewDraftPage() {
             className="form-textarea"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            placeholder="맛, 서비스, 분위기, 누구와 갔는지 등 자유롭게 적어주세요."
+            style={{ minHeight: 120 }}
+            placeholder={"사진으로 알 수 없는 것들을 적어주세요 😊\n\n예)\n친구랑 저녁 방문, 웨이팅 15분\n돼지껍데기 탱탱하고 쫄깃, 특제소스 차별화됨\n김치말이국수 시원하고 새콤 — 마무리로 딱\n직원 친절, 테이블 간격 넓어 쾌적\n건물 뒤 공영주차장 이용 가능\n재방문 의사 있음"}
           />
+          <p className="form-help">맛·식감·서비스·분위기·동행인·웨이팅 등 사진에 안 찍히는 경험을 적을수록 글이 풍부해져요.</p>
         </div>
         <div className="form-field">
           <label className="form-label">키워드 (선택)</label>
@@ -251,9 +253,10 @@ export default function NewDraftPage() {
             className="form-textarea"
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
-            placeholder="예: 강남역, 곱창, 직장인 회식, 데이트&#10;콤마로 구분하세요."
+            style={{ minHeight: 120 }}
+            placeholder={"콤마로 구분해서 입력하세요\n\n예)\n강남 고기집, 돼지껍데기 맛집,\n데이트, 회식, 탄력있는 껍데기,\n특제소스, 주차가능, 아늑한 분위기"}
           />
-          <p className="form-help">강조하고 싶은 포인트를 콤마로 구분해서 적어주세요.</p>
+          <p className="form-help">지역명, 방문 목적(데이트·회식), 음식 특징, 분위기를 넣으면 검색 노출에 도움돼요.</p>
         </div>
       </div>
 
