@@ -35,12 +35,14 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        position: "fixed",
+        inset: 0,
         background: "#f0f0f0",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "20px",
+        zIndex: 10,
       }}
     >
       <div
