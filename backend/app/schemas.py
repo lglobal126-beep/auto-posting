@@ -17,18 +17,19 @@ class DraftCreateRequest(BaseModel):
     receipt_path: Optional[str] = None
     memo: Optional[str] = None
     keywords: Optional[List[str]] = None
+    post_type: str = "blog"  # "blog" | "coupang"
+    coupang_url: Optional[str] = None  # coupang 모드 전용
 
 
 class DraftCreateData(BaseModel):
     draft_id: str
+    post_type: str = "blog"
     restaurant_name: Optional[str] = None
     address: Optional[str] = None
     receipt_info: Optional[ReceiptInfo] = None
-    blog_title: str
-    blog_body: str
-    blog_hashtags: List[str]
-    instagram_caption: str
-    instagram_hashtags: List[str]
+    blog_title: str = ""
+    blog_body: str = ""
+    blog_hashtags: List[str] = []
 
 
 class ApiResponse(BaseModel):
@@ -52,15 +53,14 @@ class MediaItem(BaseModel):
 
 class DraftDetail(BaseModel):
     id: str
+    post_type: str = "blog"
     restaurant_name: Optional[str] = None
     address: Optional[str] = None
     receipt_info: Optional[ReceiptInfo] = None
     visit_datetime: Optional[str] = None
-    blog_title: str
-    blog_body: str
-    blog_hashtags: List[str]
-    instagram_caption: str
-    instagram_hashtags: List[str]
+    blog_title: str = ""
+    blog_body: str = ""
+    blog_hashtags: List[str] = []
     image_paths: Optional[List[str]] = []
     video_paths: Optional[List[str]] = []
 
@@ -69,8 +69,6 @@ class DraftUpdateRequest(BaseModel):
     blog_title: Optional[str] = None
     blog_body: Optional[str] = None
     blog_hashtags: Optional[List[str]] = None
-    instagram_caption: Optional[str] = None
-    instagram_hashtags: Optional[List[str]] = None
 
 
 class PublishRequest(BaseModel):

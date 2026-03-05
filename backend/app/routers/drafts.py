@@ -18,7 +18,8 @@ from app.services.receipt_analyzer import (
     download_from_supabase_and_analyze,
     analyze_food_photos_from_supabase,
 )
-from app.services.llm import generate_post_from_context
+from app.services.llm import generate_post_from_context, generate_coupang_review
+from app.services.coupang_scraper import fetch_product_info, build_product_summary
 
 router = APIRouter()
 
@@ -42,10 +43,61 @@ async def create_draft(
 
     llm_api_url = os.getenv("LLM_API_URL", "")
     llm_api_key = os.getenv("LLM_API_KEY", "")
-    supabase_url = os.getenv("SUPABASE_URL", "")
 
     supabase_client = db.get_supabase()
 
+    # ── 쿠팡 리뷰 모드 ──────────────────────────────────────────────
+    if payload.post_type == "coupang":
+        product_summary = ""
+        if payload.coupang_url:
+            info = fetch_product_info(payload.coupang_url)
+            product_summary = build_product_summary(info)
+
+        # 상품 사진 분석 (선택)
+        photo_descriptions = []
+        if payload.image_paths:
+            photo_results = analyze_food_photos_from_supabase(
+                supabase_client=supabase_client,
+                bucket="media",
+                paths=payload.image_paths,
+                api_key=llm_api_key,
+                api_url=llm_api_url,
+            )
+            photo_descriptions = [r["description"] for r in photo_results]
+            interval = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
+            time.sleep(interval)
+
+        llm_result = generate_coupang_review(
+            llm_api_url=llm_api_url,
+            llm_api_key=llm_api_key,
+            product_summary=product_summary,
+            user_memo=payload.memo,
+            photo_descriptions=photo_descriptions or None,
+        )
+
+        row = db.create_draft(user_id, {
+            "post_type": "coupang",
+            "coupang_url": payload.coupang_url,
+            "image_paths": payload.image_paths,
+            "video_paths": payload.video_paths,
+            "blog_title": llm_result["review_title"],
+            "blog_body": llm_result["review_body"],
+            "blog_hashtags": [],
+            "instagram_caption": "",
+            "instagram_hashtags": [],
+        })
+
+        draft_id = str(row["id"]) if row else "temp"
+        data = DraftCreateData(
+            draft_id=draft_id,
+            post_type="coupang",
+            blog_title=llm_result["review_title"],
+            blog_body=llm_result["review_body"],
+            blog_hashtags=[],
+        )
+        return ApiResponse(success=True, data=data.model_dump())
+
+    # ── 블로그 모드 (기존 로직) ────────────────────────────────────
     # 1) 영수증 Gemini Vision OCR
     receipt_data: dict = {}
     if payload.receipt_path:
@@ -57,8 +109,7 @@ async def create_draft(
             api_url=llm_api_url,
         )
 
-    # 2) 음식 사진별 상세 설명 (영수증 제외한 image_paths만)
-    # 영수증 OCR 이후 RPM 제한 대응 딜레이
+    # 2) 음식 사진별 상세 설명
     if payload.receipt_path and payload.image_paths:
         interval = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
         time.sleep(interval)
@@ -88,12 +139,12 @@ async def create_draft(
         visit_date=receipt_data.get("visit_date"),
     ) if receipt_data else None
 
-    # 3) LLM 호출 전 딜레이 (마지막 사진 분석 후 RPM 대응)
+    # 3) LLM 호출 전 딜레이
     if payload.image_paths or payload.receipt_path:
         interval = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
         time.sleep(interval)
 
-    # 4) LLM 호출 (음식 사진 설명 포함)
+    # 4) LLM 호출
     llm_result = generate_post_from_context(
         llm_api_url=llm_api_url,
         llm_api_key=llm_api_key,
@@ -109,6 +160,7 @@ async def create_draft(
 
     # 5) DB 저장
     row = db.create_draft(user_id, {
+        "post_type": "blog",
         "restaurant_name": restaurant_name,
         "address": address,
         "phone": phone,
@@ -119,22 +171,21 @@ async def create_draft(
         "blog_title": llm_result["blog_title"],
         "blog_body": llm_result["blog_body"],
         "blog_hashtags": llm_result["blog_hashtags"],
-        "instagram_caption": llm_result["instagram_caption"],
-        "instagram_hashtags": llm_result["instagram_hashtags"],
+        "instagram_caption": "",
+        "instagram_hashtags": [],
     })
 
     draft_id = str(row["id"]) if row else "temp"
 
     data = DraftCreateData(
         draft_id=draft_id,
+        post_type="blog",
         restaurant_name=restaurant_name,
         address=address,
         receipt_info=receipt_info,
         blog_title=llm_result["blog_title"],
         blog_body=llm_result["blog_body"],
         blog_hashtags=llm_result.get("blog_hashtags", []),
-        instagram_caption=llm_result["instagram_caption"],
-        instagram_hashtags=llm_result["instagram_hashtags"],
     )
     return ApiResponse(success=True, data=data.model_dump())
 
@@ -180,6 +231,7 @@ async def get_draft(
 
     detail = DraftDetail(
         id=str(row["id"]),
+        post_type=row.get("post_type", "blog"),
         restaurant_name=row.get("restaurant_name"),
         address=row.get("address"),
         receipt_info=receipt_info,
@@ -187,8 +239,6 @@ async def get_draft(
         blog_title=row.get("blog_title", ""),
         blog_body=row.get("blog_body", ""),
         blog_hashtags=row.get("blog_hashtags") or [],
-        instagram_caption=row.get("instagram_caption", ""),
-        instagram_hashtags=row.get("instagram_hashtags") or [],
         image_paths=row.get("image_paths") or [],
         video_paths=row.get("video_paths") or [],
     )

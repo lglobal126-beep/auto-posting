@@ -107,8 +107,8 @@ def build_prompt(
         food_desc_str = "\n".join(numbered)
 
     return f"""
-당신은 네이버 블로그 파워블로거이자 인스타그램 맛집 인플루언서입니다.
-아래 식당 정보와 사진 분석 결과를 바탕으로 블로그 포스팅과 인스타그램 게시글을 작성해주세요.
+당신은 맛집을 즐겨 다니는 평범한 30대로, 네이버 블로그에 방문 후기를 직접 작성하는 사람입니다.
+아래 식당 정보와 사진 분석 결과를 바탕으로 블로그 포스팅을 작성해주세요.
 
 ━━━ 식당 정보 ━━━
 - 상호명: {restaurant_name or "알 수 없음"}
@@ -124,9 +124,14 @@ def build_prompt(
 {food_desc_str or "  (사진 정보 없음)"}
 
 ━━━ 네이버 블로그 작성 기준 ━━━
-• 글의 첫 문장은 반드시 "안녕하세요 여러분! 접니다." 로 시작할 것
-• 파워블로거 특유의 친근하고 따뜻한 존댓말 문체 (마치 친한 언니/오빠가 알려주는 느낌)
-• 이모지는 문단 또는 문장의 끝에만 배치 (절대 문단·문장 앞에 쓰지 말 것, 예: "정말 맛있었어요 😋" O / "😋 정말 맛있었어요" X)
+
+【핵심 원칙 — 절대 AI 느낌 없어야 함】
+• 평범한 사람이 직접 타이핑한 느낌으로 작성
+• 문장이 완벽히 매끄럽지 않아도 됨, 자연스러운 구어체
+• "~했어요", "~이었어요", "~거든요", "~더라고요" 선호
+• 같은 표현 반복 없이, 생동감 있게
+• 글의 첫 문장은 반드시 "안녕하세요 여러분! 접니다." 로 시작
+• 이모지는 문단 또는 문장의 끝에만 배치 (앞에 쓰지 말 것)
 • 제목: "[가게명] 맛집 | [메뉴 or 분위기] 솔직후기 🍴" 형식으로 검색 최적화
 
 【가독성 규칙 — 반드시 준수 / 모바일 중앙정렬 기준】
@@ -165,12 +170,6 @@ def build_prompt(
 • 총 글자 수 800~1500자 내외
 • 영수증 이미지는 글에 언급하지 말 것
 
-━━━ 인스타그램 작성 기준 ━━━
-• 첫 줄: 핵심 후크 문장 (이모지 포함, 임팩트 있게)
-• 2~4줄: 가장 인상 깊었던 메뉴 1~2개 감성적으로 표현
-• 모바일에서 읽기 좋게 줄바꿈 적극 활용
-• 이모지 자연스럽게 사용
-
 ━━━ 출력 형식 (반드시 아래 태그를 정확하게 사용) ━━━
 
 [BLOG_TITLE]
@@ -186,15 +185,126 @@ def build_prompt(
 [BLOG_HASHTAGS]
 #해시태그1 #해시태그2 ... (15~25개)
 [/BLOG_HASHTAGS]
-
-[INSTA_CAPTION]
-캡션 (3~5줄, 이모지 포함)
-[/INSTA_CAPTION]
-
-[INSTA_HASHTAGS]
-#해시태그1 #해시태그2 ... (10~20개, 한/영 혼합)
-[/INSTA_HASHTAGS]
 """.strip()
+
+
+def generate_coupang_review(
+    *,
+    llm_api_url: str,
+    llm_api_key: str,
+    product_summary: str,
+    user_memo: Optional[str],
+    photo_descriptions: Optional[List[str]] = None,
+) -> dict:
+    """
+    Gemini API로 쿠팡 리뷰를 생성합니다.
+    Returns: {review_title, review_body}
+    """
+    if not llm_api_url:
+        return _coupang_error("LLM_API_URL이 설정되지 않았습니다.")
+    if not llm_api_key:
+        return _coupang_error("LLM_API_KEY가 설정되지 않았습니다.")
+
+    prompt = build_coupang_prompt(
+        product_summary=product_summary,
+        user_memo=user_memo,
+        photo_descriptions=photo_descriptions,
+    )
+
+    headers = {"x-goog-api-key": llm_api_key, "Content-Type": "application/json"}
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.85},
+    }
+
+    try:
+        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=90)
+    except Exception as e:
+        logger.exception("LLM 요청 실패: %s", e)
+        return _coupang_error(f"LLM 요청 오류: {e}")
+
+    if not resp.ok:
+        return _coupang_error(f"LLM HTTP 에러 {resp.status_code}")
+
+    try:
+        raw = resp.json()
+        parts = raw["candidates"][0]["content"]["parts"]
+        content = "".join(p.get("text", "") for p in parts)
+    except Exception as e:
+        return _coupang_error("LLM 응답 구조 오류")
+
+    review_title = _extract(content, "[REVIEW_TITLE]", "[/REVIEW_TITLE]") or "상품 후기"
+    review_body = _extract(content, "[REVIEW_BODY]", "[/REVIEW_BODY]") or content.strip()
+
+    return {
+        "review_title": review_title.strip(),
+        "review_body": review_body.strip(),
+    }
+
+
+def build_coupang_prompt(
+    *,
+    product_summary: str,
+    user_memo: Optional[str],
+    photo_descriptions: Optional[List[str]] = None,
+) -> str:
+    photo_str = ""
+    if photo_descriptions:
+        photo_str = "\n".join(f"  {i+1}. {d}" for i, d in enumerate(photo_descriptions))
+
+    return f"""
+당신은 쿠팡에서 물건을 자주 구매하는 평범한 30대 소비자입니다.
+아래 상품 정보와 사용 메모를 바탕으로 쿠팡 리뷰를 작성해주세요.
+
+━━━ 상품 정보 ━━━
+{product_summary or "(상품 정보 없음)"}
+
+━━━ 사용 메모 (구매자 직접 작성) ━━━
+{user_memo or "(없음)"}
+
+━━━ 실제 사진 분석 결과 ━━━
+{photo_str or "(없음)"}
+
+━━━ 리뷰 작성 기준 ━━━
+
+【핵심 원칙 — 반드시 준수】
+• 절대로 AI가 쓴 것처럼 느껴지면 안 됨
+• 평범한 한국인이 스마트폰으로 직접 타이핑한 느낌
+• 문장이 완벽하지 않아도 됨, 구어체 자연스럽게
+• "~습니다" 보다 "~해요", "~이에요", "~거든요" 선호
+• 과장 없이 솔직하게, 단점도 한두 개는 언급
+• "내돈내산"임을 자연스럽게 표현
+• 글자 수: 400~700자 내외
+
+【구성 순서】
+① 한줄평 (구매 이유 + 첫인상, 1~2문장)
+② 구매 계기 (왜 이 제품을 골랐는지 짧게)
+③ ✅ 좋은 점 (2~4가지, 각 항목 번호 매기기)
+   형식: "1. 항목명\n설명 1~2문장"
+④ ❌ 아쉬운 점 (1~2가지, 솔직하게)
+⑤ 총평 (추천 대상 포함, 2~3문장)
+⑥ 마무리: "내돈내산 후기였어요. 도움이 됐다면 '도움이 됐어요' 눌러주세요!"
+
+【절대 금지】
+• "완벽합니다", "최고의 선택입니다" 같은 과도한 찬사
+• "~드립니다", "~바랍니다" 같은 격식체
+• 영수증이나 상품 링크 언급
+• 마크다운 기호 (**, ## 등)
+
+━━━ 출력 형식 ━━━
+
+[REVIEW_TITLE]
+한줄평 1문장 (예: 디자인에 반하고 성능에 두 번 반하는 직장인 필수템)
+[/REVIEW_TITLE]
+
+[REVIEW_BODY]
+(구매 계기 ~ 마무리까지 전체 본문)
+[/REVIEW_BODY]
+""".strip()
+
+
+def _coupang_error(msg: str) -> dict:
+    return {"review_title": "생성 오류", "review_body": msg}
 
 
 def _error(msg: str) -> dict:

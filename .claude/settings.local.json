@@ -10,7 +10,10 @@
       "Bash(py write_css.py)",
       "Bash(del write_css.py)",
       "Bash(py write_frontend.py)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(python3:*)",
+      "Bash(python -V)",
+      "Bash(python -c \"print\\(''ok''\\)\")"
     ]
   }
 }

@@ -16,10 +16,12 @@ DROP POLICY IF EXISTS "Anyone can read media" ON storage.objects;
 CREATE TABLE drafts (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  post_type       TEXT NOT NULL DEFAULT 'blog',  -- 'blog' | 'coupang'
   restaurant_name TEXT,
   address         TEXT,
   phone           TEXT,
   receipt_info    JSONB,
+  coupang_url     TEXT,
   image_paths     TEXT[] DEFAULT '{}',
   video_paths     TEXT[] DEFAULT '{}',
   receipt_path    TEXT,
@@ -32,6 +34,10 @@ CREATE TABLE drafts (
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ※ 이미 테이블이 존재하는 경우 아래 구문으로 컬럼만 추가하세요:
+-- ALTER TABLE drafts ADD COLUMN IF NOT EXISTS post_type TEXT NOT NULL DEFAULT 'blog';
+-- ALTER TABLE drafts ADD COLUMN IF NOT EXISTS coupang_url TEXT;
 
 -- 2. posts 테이블 (발행 이력)
 CREATE TABLE posts (
