@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -57,6 +58,11 @@ async def create_draft(
         )
 
     # 2) 음식 사진별 상세 설명 (영수증 제외한 image_paths만)
+    # 영수증 OCR 이후 RPM 제한 대응 딜레이
+    if payload.receipt_path and payload.image_paths:
+        interval = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
+        time.sleep(interval)
+
     food_photo_results = []
     if payload.image_paths:
         food_photo_results = analyze_food_photos_from_supabase(
@@ -82,7 +88,12 @@ async def create_draft(
         visit_date=receipt_data.get("visit_date"),
     ) if receipt_data else None
 
-    # 3) LLM 호출 (음식 사진 설명 포함)
+    # 3) LLM 호출 전 딜레이 (마지막 사진 분석 후 RPM 대응)
+    if payload.image_paths or payload.receipt_path:
+        interval = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
+        time.sleep(interval)
+
+    # 4) LLM 호출 (음식 사진 설명 포함)
     llm_result = generate_post_from_context(
         llm_api_url=llm_api_url,
         llm_api_key=llm_api_key,
@@ -96,7 +107,7 @@ async def create_draft(
         food_descriptions=food_descriptions,
     )
 
-    # 4) DB 저장
+    # 5) DB 저장
     row = db.create_draft(user_id, {
         "restaurant_name": restaurant_name,
         "address": address,

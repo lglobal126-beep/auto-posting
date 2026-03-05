@@ -5,9 +5,15 @@ import base64
 import json
 import logging
 import os
+import time
 from typing import Optional
 
 import requests
+
+# RPM 제한 대응: 호출 간 최소 대기 시간 (초)
+# Gemini 2.5 Flash 무료: RPM=5 → 60/5=12초, 여유분 포함 13초
+# Gemini 2.0 Flash 무료: RPM=15 → 4초
+GEMINI_CALL_INTERVAL = float(os.getenv("GEMINI_CALL_INTERVAL", "13"))
 
 logger = logging.getLogger("receipt_analyzer")
 
@@ -46,23 +52,28 @@ def analyze_receipt_from_bytes(
 
     headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
-    try:
-        resp = requests.post(api_url, json=body, headers=headers, timeout=60)
-        resp.raise_for_status()
-        raw = resp.json()
-        text = raw["candidates"][0]["content"]["parts"][0]["text"]
-
-        # JSON 블록 추출
-        text = text.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
-        return result
-    except Exception as e:
-        logger.exception("영수증 분석 실패: %s", e)
-        return {}
+    for attempt in range(3):
+        try:
+            resp = requests.post(api_url, json=body, headers=headers, timeout=60)
+            if resp.status_code == 429:
+                wait = GEMINI_CALL_INTERVAL * (attempt + 1)
+                logger.warning("영수증 OCR 429 Rate Limit — %d초 후 재시도 (%d/3)", wait, attempt + 1)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            raw = resp.json()
+            text = raw["candidates"][0]["content"]["parts"][0]["text"]
+            text = text.strip()
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            return json.loads(text.strip())
+        except Exception as e:
+            logger.exception("영수증 분석 실패 (시도 %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(GEMINI_CALL_INTERVAL)
+    return {}
 
 
 def download_from_supabase_and_analyze(
@@ -117,15 +128,23 @@ def analyze_food_photo_from_bytes(
 
     headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
-    try:
-        resp = requests.post(api_url, json=body, headers=headers, timeout=60)
-        resp.raise_for_status()
-        raw = resp.json()
-        text = raw["candidates"][0]["content"]["parts"][0]["text"].strip()
-        return text if text != "해당없음" else ""
-    except Exception as e:
-        logger.exception("음식 사진 분석 실패: %s", e)
-        return ""
+    for attempt in range(3):
+        try:
+            resp = requests.post(api_url, json=body, headers=headers, timeout=60)
+            if resp.status_code == 429:
+                wait = GEMINI_CALL_INTERVAL * (attempt + 1)
+                logger.warning("음식 사진 분석 429 Rate Limit — %d초 후 재시도 (%d/3)", wait, attempt + 1)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            raw = resp.json()
+            text = raw["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return text if text != "해당없음" else ""
+        except Exception as e:
+            logger.exception("음식 사진 분석 실패 (시도 %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(GEMINI_CALL_INTERVAL)
+    return ""
 
 
 def analyze_food_photos_from_supabase(
@@ -142,7 +161,11 @@ def analyze_food_photos_from_supabase(
     """
     results = []
     mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
-    for path in paths:
+    for i, path in enumerate(paths):
+        # 두 번째 사진부터 호출 전 대기 (RPM 제한 대응)
+        if i > 0:
+            logger.info("Gemini RPM 대기 중... %.0f초", GEMINI_CALL_INTERVAL)
+            time.sleep(GEMINI_CALL_INTERVAL)
         try:
             image_bytes = supabase_client.storage.from_(bucket).download(path)
             ext = path.rsplit(".", 1)[-1].lower()
