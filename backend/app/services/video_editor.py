@@ -36,8 +36,9 @@ def merge_video_with_narration(
             ass_path = os.path.join(tmpdir, "subtitles.ass")
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(ass_content)
-            # fontsdir로 시스템 폰트 경로를 명시해야 libass가 한글 폰트를 인식함
-            vf = f"ass={ass_path}:fontsdir=/usr/share/fonts"
+            # 레포에 번들된 폰트 디렉토리를 libass에 명시
+            fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+            vf = f"ass={ass_path}:fontsdir={fonts_dir}"
 
         cmd = [
             "ffmpeg", "-y",
