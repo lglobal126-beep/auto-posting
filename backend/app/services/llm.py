@@ -340,6 +340,8 @@ def generate_shorts_script(
     인스타/숏츠용 나레이션 스크립트를 생성합니다.
     Returns: {script, error?}
     """
+    import time as _time
+
     if not llm_api_url:
         return {"script": "", "error": "LLM_API_URL이 설정되지 않았습니다."}
     if not llm_api_key:
@@ -392,18 +394,39 @@ def generate_shorts_script(
         "generationConfig": {"temperature": 0.9},
     }
 
-    try:
-        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=120)
-        resp.raise_for_status()
-        raw = resp.json()
-        parts = raw["candidates"][0]["content"]["parts"]
-        content = "".join(p.get("text", "") for p in parts)
-    except Exception as e:
-        logger.exception("숏츠 스크립트 생성 실패: %s", e)
-        return {"script": "", "error": str(e)}
+    # preview 모델 실패 시 안정 모델로 폴백
+    urls = [llm_api_url]
+    base_url = llm_api_url.rsplit("/models/", 1)[0] if "/models/" in llm_api_url else ""
+    if base_url:
+        urls.append(f"{base_url}/models/gemma-3-27b-it:generateContent")
 
-    script = _extract(content, "[SHORTS_SCRIPT]", "[/SHORTS_SCRIPT]") or content.strip()
-    return {"script": script.strip()}
+    last_error = "알 수 없는 오류"
+    for url in urls:
+        for attempt in range(3):
+            try:
+                resp = requests.post(url, json=body, headers=headers, timeout=90)
+                if resp.status_code == 503:
+                    last_error = f"Gemini 서버 일시 오류 (503)"
+                    logger.warning("Gemini 503, 재시도 %d/3 url=%s", attempt + 1, url)
+                    _time.sleep(3)
+                    continue
+                resp.raise_for_status()
+                raw = resp.json()
+                parts = raw["candidates"][0]["content"]["parts"]
+                content = "".join(p.get("text", "") for p in parts)
+                script = _extract(content, "[SHORTS_SCRIPT]", "[/SHORTS_SCRIPT]") or content.strip()
+                logger.info("숏츠 스크립트 생성 완료 (url=%s, attempt=%d)", url, attempt + 1)
+                return {"script": script.strip()}
+            except requests.Timeout:
+                last_error = "응답 시간 초과 (90초)"
+                logger.warning("Gemini 타임아웃, 재시도 %d/3 url=%s", attempt + 1, url)
+                _time.sleep(2)
+            except Exception as e:
+                last_error = str(e)
+                logger.exception("숏츠 스크립트 생성 실패: %s", e)
+                break
+
+    return {"script": "", "error": last_error}
 
 
 def _coupang_error(msg: str) -> dict:
