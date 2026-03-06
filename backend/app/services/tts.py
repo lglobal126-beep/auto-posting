@@ -33,7 +33,7 @@ def generate_tts_audio(text: str, api_key: str) -> bytes:
         },
     }
 
-    logger.info("ElevenLabs 요청 시작 - key prefix: %s, key len: %d", api_key[:8] if api_key else "EMPTY", len(api_key or ""))
+    logger.warning("ElevenLabs 요청 시작 - key prefix: %s, key len: %d", api_key[:8] if api_key else "EMPTY", len(api_key or ""))
     try:
         resp = requests.post(url, json=body, headers=headers, timeout=60)
         resp.raise_for_status()
