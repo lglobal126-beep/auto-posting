@@ -38,7 +38,12 @@ def merge_video_with_narration(
                 f.write(ass_content)
             # 레포에 번들된 폰트 디렉토리를 libass에 명시
             fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
-            vf = f"ass={ass_path}:fontsdir={fonts_dir}"
+            font_files = os.listdir(fonts_dir) if os.path.isdir(fonts_dir) else []
+            logger.info("폰트 디렉토리: %s | 파일: %s", fonts_dir, font_files)
+            # Windows 경로 구분자를 슬래시로 변환 (FFmpeg/libass 호환)
+            ass_path_fwd = ass_path.replace("\\", "/")
+            fonts_dir_fwd = fonts_dir.replace("\\", "/")
+            vf = f"ass={ass_path_fwd}:fontsdir={fonts_dir_fwd}"
 
         cmd = [
             "ffmpeg", "-y",
@@ -59,10 +64,14 @@ def merge_video_with_narration(
         cmd.append(output_path)
 
         result = subprocess.run(cmd, capture_output=True, timeout=120)
+        stderr_text = result.stderr.decode(errors="replace")
         if result.returncode != 0:
-            err = result.stderr.decode(errors="replace")
-            logger.error("FFmpeg 실패: %s", err)
-            raise RuntimeError(f"영상 병합 실패: {err[:300]}")
+            logger.error("FFmpeg 실패: %s", stderr_text)
+            raise RuntimeError(f"영상 병합 실패: {stderr_text[:300]}")
+        # 자막/폰트 관련 경고 로깅
+        for line in stderr_text.splitlines():
+            if any(k in line.lower() for k in ("ass", "font", "subtitle", "warn", "error")):
+                logger.info("FFmpeg: %s", line)
 
         with open(output_path, "rb") as f:
             output_bytes = f.read()

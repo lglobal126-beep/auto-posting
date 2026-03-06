@@ -58,11 +58,17 @@ async def create_shorts(
         raise HTTPException(status_code=500, detail=f"스크립트 생성 실패: {script_result['error']}")
 
     script = script_result["script"]
-    logger.info("스크립트 생성 완료: %d자", len(script))
+    logger.info("스크립트 생성 완료: %d자 (영상 %ds 기준, 목표 %.0f~%.0f자)",
+                len(script), payload.video_duration or 0,
+                (payload.video_duration or 20) * 3.8,
+                (payload.video_duration or 20) * 4.5)
 
     # 2) Edge TTS 생성 (오디오 + 단어 타이밍)
     try:
         audio_bytes, word_timings = await generate_tts_audio(script)
+        if word_timings:
+            audio_dur_ms = word_timings[-1]["end_ms"]
+            logger.info("TTS 완료: 오디오 %.1f초, 단어 %d개", audio_dur_ms / 1000, len(word_timings))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
 
