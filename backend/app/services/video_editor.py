@@ -44,13 +44,15 @@ def merge_video_with_narration(
             "ffmpeg", "-y",
             "-i", video_path,
             "-i", audio_path,
-            "-c:v", "libx264",    # 자막 burn-in 시 재인코딩 필요
-            "-preset", "fast",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",  # 메모리 최소화 (fast → ultrafast)
+            "-crf", "28",            # 압축률 높여 메모리 절약
+            "-threads", "1",         # 단일 스레드로 메모리 절약
             "-c:a", "aac",
-            "-b:a", "128k",
-            "-map", "0:v:0",      # 영상 트랙
-            "-map", "1:a:0",      # TTS 오디오 트랙 (1.5배속으로 이미 영상 길이에 맞춰짐)
-            "-shortest",          # 짧은 쪽에 맞춰 자동 컷
+            "-b:a", "96k",
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-shortest",
         ]
         if vf:
             cmd += ["-vf", vf]
