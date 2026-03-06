@@ -328,6 +328,84 @@ def build_coupang_prompt(
 """.strip()
 
 
+def generate_shorts_script(
+    *,
+    llm_api_url: str,
+    llm_api_key: str,
+    restaurant_name: str,
+    area: str,
+    user_memo: Optional[str] = None,
+) -> dict:
+    """
+    인스타/숏츠용 나레이션 스크립트를 생성합니다.
+    Returns: {script, error?}
+    """
+    if not llm_api_url:
+        return {"script": "", "error": "LLM_API_URL이 설정되지 않았습니다."}
+    if not llm_api_key:
+        return {"script": "", "error": "LLM_API_KEY가 설정되지 않았습니다."}
+
+    prompt = f"""
+당신은 음식 콘텐츠 전문 마케터입니다.
+인스타그램 릴스 / 유튜브 숏츠에 올릴 음식점 나레이션 스크립트를 작성해주세요.
+
+━━━ 가게 정보 ━━━
+- 상호명: {restaurant_name}
+- 지역: {area}
+- 추가 메모: {user_memo or "없음"}
+
+━━━ 스크립트 작성 기준 ━━━
+
+【목표】
+• 첫 3초 안에 스크롤을 멈추게 할 것
+• 음식 욕구와 방문 욕구를 동시에 자극
+• 저장·공유 유도로 바이럴 확산
+
+【구조 — 반드시 아래 순서로 작성】
+① 훅 (0~4초): 놀람·호기심을 유발하는 짧고 강렬한 문장
+   예) "야, 이거 진짜야?", "경기에 이런 데가?", "여기 찐이더라"
+② 장소 티저 (4~10초): 지역명만 살짝 언급, 가게 이름·분위기 소개
+③ 감각 묘사 (10~30초): ASMR 감성으로 음식 비주얼·소리·향기·맛 자극
+   · "지글지글", "바삭", "촉촉", "육즙이 터지는" 같은 감각 동사 활용
+   · 시청자가 눈앞에 있는 것처럼 느끼게
+④ 신뢰/희소성 (30~38초): "현지인만 아는 집", "요즘 줄서는 이유가 있더라"
+⑤ CTA (38~45초): "저장해두고 꼭 가보세요", "주소 댓글에 남겨요"
+
+【말투 규칙】
+• 20~30대가 친구에게 말하듯 자연스러운 구어체
+• 문장은 짧게, 호흡 끊어 읽기 쉽게
+• "~요", "~더라", "~잖아요" 선호
+• 과장 광고처럼 들리면 안 됨 — 진심 어린 추천 느낌
+• 총 글자 수 180~250자 (30~45초 낭독 분량)
+• 마크다운 기호·이모지 절대 금지 (TTS 낭독용이므로)
+
+━━━ 출력 형식 ━━━
+
+[SHORTS_SCRIPT]
+(나레이션 스크립트 전체, 문단 구분은 빈 줄로)
+[/SHORTS_SCRIPT]
+""".strip()
+
+    headers = {"x-goog-api-key": llm_api_key, "Content-Type": "application/json"}
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.9},
+    }
+
+    try:
+        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=60)
+        resp.raise_for_status()
+        raw = resp.json()
+        parts = raw["candidates"][0]["content"]["parts"]
+        content = "".join(p.get("text", "") for p in parts)
+    except Exception as e:
+        logger.exception("숏츠 스크립트 생성 실패: %s", e)
+        return {"script": "", "error": str(e)}
+
+    script = _extract(content, "[SHORTS_SCRIPT]", "[/SHORTS_SCRIPT]") or content.strip()
+    return {"script": script.strip()}
+
+
 def _coupang_error(msg: str) -> dict:
     return {"review_title": "생성 오류", "review_body": msg}
 

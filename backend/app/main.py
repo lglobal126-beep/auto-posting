@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import drafts, posts, auth
+from app.routers import drafts, posts, auth, shorts
 
 
 def create_app() -> FastAPI:
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(drafts.router, prefix="/drafts", tags=["drafts"])
     app.include_router(posts.router, prefix="/posts", tags=["posts"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(shorts.router, prefix="/shorts", tags=["shorts"])
 
     return app
 

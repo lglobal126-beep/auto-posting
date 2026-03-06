@@ -55,6 +55,9 @@ export default function NavBar() {
         <Link href="/drafts" className={linkClass("/drafts")}>
           내 초안
         </Link>
+        <Link href="/shorts/new" className={linkClass("/shorts")}>
+          숏츠
+        </Link>
 
         {userEmail && (
           <div ref={dropdownRef} style={{ position: "relative" }}>
