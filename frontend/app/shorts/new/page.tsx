@@ -17,6 +17,7 @@ export default function NewShortsPage() {
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [restaurantName, setRestaurantName] = useState("");
   const [area, setArea] = useState("");
   const [memo, setMemo] = useState("");
@@ -30,7 +31,17 @@ export default function NewShortsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setVideoFile(file);
-    setVideoPreview(URL.createObjectURL(file));
+    setVideoDuration(null);
+    const url = URL.createObjectURL(file);
+    setVideoPreview(url);
+    // 영상 길이 추출
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.onloadedmetadata = () => {
+      setVideoDuration(Math.round(tempVideo.duration));
+      URL.revokeObjectURL(tempVideo.src);
+    };
+    tempVideo.src = url;
     setResult(null);
     e.target.value = "";
   };
@@ -73,6 +84,7 @@ export default function NewShortsPage() {
           restaurant_name: restaurantName.trim(),
           area: area.trim(),
           memo: memo.trim() || undefined,
+          video_duration: videoDuration ?? undefined,
         }),
       });
 

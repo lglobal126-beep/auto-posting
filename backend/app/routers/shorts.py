@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.services import database as db
 from app.services.llm import generate_shorts_script
 from app.services.tts import generate_tts_audio
+from app.services.subtitle import generate_ass
 from app.services.video_editor import merge_video_with_narration
 
 router = APIRouter()
@@ -20,6 +21,7 @@ class ShortsCreateRequest(BaseModel):
     restaurant_name: str
     area: str                  # 예: "경기 화성시"
     memo: Optional[str] = None
+    video_duration: Optional[int] = None  # 영상 길이 (초)
 
 
 def _require_user(authorization: Optional[str]) -> str:
@@ -50,6 +52,7 @@ async def create_shorts(
         restaurant_name=payload.restaurant_name,
         area=payload.area,
         user_memo=payload.memo,
+        video_duration=payload.video_duration,
     )
     if script_result.get("error"):
         raise HTTPException(status_code=500, detail=f"스크립트 생성 실패: {script_result['error']}")
@@ -57,11 +60,14 @@ async def create_shorts(
     script = script_result["script"]
     logger.info("스크립트 생성 완료: %d자", len(script))
 
-    # 2) ElevenLabs TTS 생성
+    # 2) Edge TTS 생성 (오디오 + 단어 타이밍)
     try:
-        audio_bytes = await generate_tts_audio(script)
+        audio_bytes, word_timings = await generate_tts_audio(script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
+
+    # 자막 ASS 생성
+    ass_content = generate_ass(word_timings)
 
     # TTS 오디오를 Supabase에 업로드
     audio_path = f"shorts/{int(time.time())}_narration.mp3"
@@ -86,7 +92,7 @@ async def create_shorts(
 
     # 4) FFmpeg로 영상 + 나레이션 병합
     try:
-        merged_bytes = merge_video_with_narration(video_bytes, audio_bytes, video_ext=ext)
+        merged_bytes = merge_video_with_narration(video_bytes, audio_bytes, video_ext=ext, ass_content=ass_content)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 

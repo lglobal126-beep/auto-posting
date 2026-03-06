@@ -362,6 +362,7 @@ def generate_shorts_script(
     restaurant_name: str,
     area: str,
     user_memo: Optional[str] = None,
+    video_duration: Optional[int] = None,
 ) -> dict:
     """
     인스타/숏츠용 나레이션 스크립트를 생성합니다.
@@ -373,6 +374,18 @@ def generate_shorts_script(
         return {"script": "", "error": "LLM_API_URL이 설정되지 않았습니다."}
     if not llm_api_key:
         return {"script": "", "error": "LLM_API_KEY가 설정되지 않았습니다."}
+
+    # 영상 길이의 1.5배 분량의 대본 생성 (영상을 루프로 채울 것)
+    base_dur = video_duration or 20
+    dur = int(base_dur * 1.5)
+    # 한국어 TTS 발화 속도: 약 3.5자/초
+    char_min = max(30, int(dur * 3.2))
+    char_max = int(dur * 3.8)
+    # 장면 타임스탬프 비율
+    t1 = min(3, int(dur * 0.08))
+    t2 = int(dur * 0.25)
+    t3 = int(dur * 0.65)
+    t4 = int(dur * 0.85)
 
     prompt = f"""
 당신은 여단오 채널 스타일의 숏폼 음식 리뷰 크리에이터입니다.
@@ -394,25 +407,25 @@ def generate_shorts_script(
 
 ━━━ 영상 장면 흐름에 맞는 대본 구성 ━━━
 
-① 훅 (0~3초) — 음식 첫 등장, 엄지 멈추게 할 한 마디
+① 훅 (0~{t1}초) — 음식 첫 등장, 엄지 멈추게 할 한 마디
    예) "야 이거 봐봐", "쌰갈 이게 뭐야", "잠깐 이거 실화임?"
 
-② 가게 티저 (3~8초) — 지역·가게 분위기 짧게
+② 가게 티저 ({t1}~{t2}초) — 지역·가게 분위기 짧게
    예) "경기도에 이런 데가 있었어", "여기 아는 사람만 안다고"
 
-③ 비주얼 묘사 (8~22초) — 음식 클로즈업 보여줄 때
+③ 비주얼 묘사 ({t2}~{t3}초) — 음식 클로즈업 보여줄 때
    색감·윤기·두께·김·소리 감각적으로, 쌰갈 터뜨리기 좋은 타이밍
 
-④ 한 입 리액션 (22~36초) — 먹는 장면
+④ 한 입 리액션 ({t3}~{t4}초) — 먹는 장면
    첫 반응 진심으로, 식감·맛·향 구체적으로, 자연스럽게 쌰갈 한 번
 
-⑤ 마무리 CTA (36~44초)
+⑤ 마무리 CTA ({t4}~{dur}초)
    예) "저장해두고 꼭 와봐", "같이 올 사람 댓글에", "주소 댓글에 달아줄게"
 
 ━━━ 금지 사항 ━━━
 • 이모지, 마크다운, 특수문자 절대 금지 (TTS 낭독용)
 • "맛집입니다", "강추합니다" 같은 광고 말투 금지
-• 총 글자 수 200~260자 (TTS 35~44초 분량)
+• 총 글자 수 {char_min}~{char_max}자 (TTS {dur}초 분량, 영상 {base_dur}초의 1.5배)
 
 ━━━ 출력 형식 ━━━
 
