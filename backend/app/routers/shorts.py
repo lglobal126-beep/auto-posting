@@ -59,7 +59,7 @@ async def create_shorts(
 
     # 2) ElevenLabs TTS 생성
     try:
-        audio_bytes = generate_tts_audio(script)
+        audio_bytes = await generate_tts_audio(script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
 
