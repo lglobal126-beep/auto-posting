@@ -41,11 +41,7 @@ async def create_shorts(
 
     llm_api_url = os.getenv("LLM_API_URL", "")
     llm_api_key = os.getenv("LLM_API_KEY", "")
-    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "")
     supabase_client = db.get_supabase()
-
-    if not elevenlabs_key:
-        raise HTTPException(status_code=500, detail="ELEVENLABS_API_KEY가 설정되지 않았습니다.")
 
     # 1) 나레이션 스크립트 생성
     script_result = generate_shorts_script(
@@ -63,7 +59,7 @@ async def create_shorts(
 
     # 2) ElevenLabs TTS 생성
     try:
-        audio_bytes = generate_tts_audio(script, elevenlabs_key)
+        audio_bytes = generate_tts_audio(script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
 

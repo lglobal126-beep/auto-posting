@@ -1,9 +1,37 @@
 from typing import List, Optional
 import logging
+import time
 
 import requests
 
 logger = logging.getLogger("llm")
+
+
+def _gemini_post(url: str, body: dict, headers: dict) -> requests.Response:
+    """Gemini API 호출 - 503/타임아웃 시 최대 3회 재시도, 실패 시 gemma-3-27b-it 폴백"""
+    base_url = url.rsplit("/models/", 1)[0] if "/models/" in url else ""
+    urls = [url]
+    if base_url:
+        urls.append(f"{base_url}/models/gemma-3-27b-it:generateContent")
+
+    last_exc: Exception = RuntimeError("알 수 없는 오류")
+    for attempt_url in urls:
+        for attempt in range(3):
+            try:
+                resp = requests.post(attempt_url, json=body, headers=headers, timeout=90)
+                if resp.status_code == 503:
+                    logger.warning("Gemini 503, 재시도 %d/3 url=%s", attempt + 1, attempt_url)
+                    time.sleep(3)
+                    continue
+                return resp
+            except requests.Timeout:
+                logger.warning("Gemini 타임아웃, 재시도 %d/3 url=%s", attempt + 1, attempt_url)
+                last_exc = requests.Timeout()
+                time.sleep(2)
+            except Exception as e:
+                last_exc = e
+                break
+    raise last_exc
 
 
 def generate_post_from_context(
@@ -38,7 +66,6 @@ def generate_post_from_context(
         food_descriptions=food_descriptions,
     )
 
-    url = llm_api_url
     headers = {"x-goog-api-key": llm_api_key, "Content-Type": "application/json"}
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -46,7 +73,7 @@ def generate_post_from_context(
     }
 
     try:
-        resp = requests.post(url, json=body, headers=headers, timeout=90)
+        resp = _gemini_post(llm_api_url, body, headers)
     except Exception as e:
         logger.exception("LLM 요청 실패: %s", e)
         return _error(f"LLM 요청 오류: {e}")
@@ -237,7 +264,7 @@ def generate_coupang_review(
     }
 
     try:
-        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=90)
+        resp = _gemini_post(llm_api_url, body, headers)
     except Exception as e:
         logger.exception("LLM 요청 실패: %s", e)
         return _coupang_error(f"LLM 요청 오류: {e}")
