@@ -14,7 +14,8 @@
       "Bash(python3:*)",
       "Bash(python -V)",
       "Bash(python -c \"print\\(''ok''\\)\")",
-      "Bash(grep -c \"\\\\\\\\u[0-9A-Fa-f]\\\\{4\\\\}\" \"c:/Users/Lee JinSoo/Desktop/Game/AIDT/개인/frontend/app/drafts/[id]/page.tsx\")"
+      "Bash(grep -c \"\\\\\\\\u[0-9A-Fa-f]\\\\{4\\\\}\" \"c:/Users/Lee JinSoo/Desktop/Game/AIDT/개인/frontend/app/drafts/[id]/page.tsx\")",
+      "WebFetch(domain:elevenlabs.io)"
     ]
   }
 }

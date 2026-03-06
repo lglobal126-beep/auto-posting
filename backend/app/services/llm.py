@@ -393,7 +393,7 @@ def generate_shorts_script(
     }
 
     try:
-        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=60)
+        resp = requests.post(llm_api_url, json=body, headers=headers, timeout=120)
         resp.raise_for_status()
         raw = resp.json()
         parts = raw["candidates"][0]["content"]["parts"]
