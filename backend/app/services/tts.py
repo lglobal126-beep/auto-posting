@@ -19,6 +19,7 @@ def generate_tts_audio(text: str, api_key: str) -> bytes:
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{ADAM_VOICE_ID}"
     headers = {
         "xi-api-key": api_key,
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "audio/mpeg",
     }
