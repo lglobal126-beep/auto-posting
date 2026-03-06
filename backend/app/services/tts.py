@@ -19,7 +19,7 @@ async def generate_tts_audio(text: str, api_key: str = "") -> Tuple[bytes, List[
       word_timings: [{"word": str, "start_ms": int, "end_ms": int}, ...]
     """
     try:
-        communicate = edge_tts.Communicate(text, VOICE)
+        communicate = edge_tts.Communicate(text, VOICE, rate="+50%")
         audio_data = b""
         word_timings: List[dict] = []
         async for chunk in communicate.stream():

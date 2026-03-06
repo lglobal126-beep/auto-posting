@@ -36,21 +36,20 @@ def merge_video_with_narration(
             ass_path = os.path.join(tmpdir, "subtitles.ass")
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(ass_content)
-            # Linux 경로이므로 콜론 이스케이프 불필요
-            vf = f"ass={ass_path}"
+            # fontsdir로 시스템 폰트 경로를 명시해야 libass가 한글 폰트를 인식함
+            vf = f"ass={ass_path}:fontsdir=/usr/share/fonts"
 
         cmd = [
             "ffmpeg", "-y",
-            "-stream_loop", "-1",  # 영상 무한 루프
             "-i", video_path,
             "-i", audio_path,
-            "-c:v", "libx264",    # 루프 + 자막 burn-in 시 재인코딩 필요
+            "-c:v", "libx264",    # 자막 burn-in 시 재인코딩 필요
             "-preset", "fast",
             "-c:a", "aac",
             "-b:a", "128k",
-            "-map", "0:v:0",      # 루프된 영상 트랙
-            "-map", "1:a:0",      # TTS 오디오 트랙
-            "-shortest",          # 오디오 끝나면 자동 종료
+            "-map", "0:v:0",      # 영상 트랙
+            "-map", "1:a:0",      # TTS 오디오 트랙 (1.5배속으로 이미 영상 길이에 맞춰짐)
+            "-shortest",          # 짧은 쪽에 맞춰 자동 컷
         ]
         if vf:
             cmd += ["-vf", vf]

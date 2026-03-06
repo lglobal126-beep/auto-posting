@@ -3,7 +3,7 @@ services:
     name: influencer-auto-post-backend
     env: python
     rootDir: backend
-    buildCommand: apt-get install -y fonts-noto-cjk 2>/dev/null || true && pip install -r requirements.txt
+    buildCommand: apt-get update -qq && apt-get install -y fonts-noto-cjk fonts-nanum && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: LLM_API_URL
