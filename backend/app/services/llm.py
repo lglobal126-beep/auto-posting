@@ -72,15 +72,13 @@ def generate_post_from_context(
     blog_title = _extract(content, "[BLOG_TITLE]", "[/BLOG_TITLE]") or "임시 제목"
     blog_body = _extract(content, "[BLOG_BODY]", "[/BLOG_BODY]") or content.strip()
     blog_tags_block = _extract(content, "[BLOG_HASHTAGS]", "[/BLOG_HASHTAGS]") or ""
-    insta_caption = _extract(content, "[INSTA_CAPTION]", "[/INSTA_CAPTION]") or "임시 캡션"
-    insta_tags_block = _extract(content, "[INSTA_HASHTAGS]", "[/INSTA_HASHTAGS]") or ""
+    summary = _extract(content, "[SUMMARY]", "[/SUMMARY]") or ""
 
     return {
         "blog_title": blog_title.strip(),
         "blog_body": blog_body.strip(),
         "blog_hashtags": _parse_hashtags(blog_tags_block) or ["#맛집", "#블로그리뷰"],
-        "instagram_caption": insta_caption.strip(),
-        "instagram_hashtags": _parse_hashtags(insta_tags_block) or ["#맛집", "#먹스타그램"],
+        "summary": summary.strip(),
     }
 
 
@@ -202,6 +200,10 @@ def build_prompt(
 [BLOG_HASHTAGS]
 #해시태그1 #해시태그2 ... (15~25개)
 [/BLOG_HASHTAGS]
+
+[SUMMARY]
+한 줄 요약: 이 식당의 방문 경험을 1~2문장으로 압축 (예: "신선한 회와 분위기 좋은 인테리어가 인상적인 강남 횟집. 모둠회와 붕장어회 모두 추천!")
+[/SUMMARY]
 """.strip()
 
 
@@ -252,10 +254,12 @@ def generate_coupang_review(
 
     review_title = _extract(content, "[REVIEW_TITLE]", "[/REVIEW_TITLE]") or "상품 후기"
     review_body = _extract(content, "[REVIEW_BODY]", "[/REVIEW_BODY]") or content.strip()
+    summary = _extract(content, "[SUMMARY]", "[/SUMMARY]") or ""
 
     return {
         "review_title": review_title.strip(),
         "review_body": review_body.strip(),
+        "summary": summary.strip(),
     }
 
 
@@ -317,6 +321,10 @@ def build_coupang_prompt(
 [REVIEW_BODY]
 (구매 계기 ~ 마무리까지 전체 본문)
 [/REVIEW_BODY]
+
+[SUMMARY]
+이 리뷰의 핵심을 1~2문장으로 압축 (예: "달달하고 간편한 직장인 간식. 가성비 좋고 재구매 의사 있음.")
+[/SUMMARY]
 """.strip()
 
 

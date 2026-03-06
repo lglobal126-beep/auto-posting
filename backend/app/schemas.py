@@ -30,6 +30,7 @@ class DraftCreateData(BaseModel):
     blog_title: str = ""
     blog_body: str = ""
     blog_hashtags: List[str] = []
+    summary: Optional[str] = None
 
 
 class ApiResponse(BaseModel):
@@ -61,6 +62,7 @@ class DraftDetail(BaseModel):
     blog_title: str = ""
     blog_body: str = ""
     blog_hashtags: List[str] = []
+    summary: Optional[str] = None
     image_paths: Optional[List[str]] = []
     video_paths: Optional[List[str]] = []
 
@@ -69,6 +71,7 @@ class DraftUpdateRequest(BaseModel):
     blog_title: Optional[str] = None
     blog_body: Optional[str] = None
     blog_hashtags: Optional[List[str]] = None
+    summary: Optional[str] = None
 
 
 class PublishRequest(BaseModel):

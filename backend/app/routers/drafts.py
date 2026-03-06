@@ -85,6 +85,7 @@ async def create_draft(
             "blog_hashtags": [],
             "instagram_caption": "",
             "instagram_hashtags": [],
+            "summary": llm_result.get("summary", ""),
         })
 
         draft_id = str(row["id"]) if row else "temp"
@@ -94,6 +95,7 @@ async def create_draft(
             blog_title=llm_result["review_title"],
             blog_body=llm_result["review_body"],
             blog_hashtags=[],
+            summary=llm_result.get("summary"),
         )
         return ApiResponse(success=True, data=data.model_dump())
 
@@ -173,6 +175,7 @@ async def create_draft(
         "blog_hashtags": llm_result["blog_hashtags"],
         "instagram_caption": "",
         "instagram_hashtags": [],
+        "summary": llm_result.get("summary", ""),
     })
 
     draft_id = str(row["id"]) if row else "temp"
@@ -186,6 +189,7 @@ async def create_draft(
         blog_title=llm_result["blog_title"],
         blog_body=llm_result["blog_body"],
         blog_hashtags=llm_result.get("blog_hashtags", []),
+        summary=llm_result.get("summary"),
     )
     return ApiResponse(success=True, data=data.model_dump())
 
@@ -239,6 +243,7 @@ async def get_draft(
         blog_title=row.get("blog_title", ""),
         blog_body=row.get("blog_body", ""),
         blog_hashtags=row.get("blog_hashtags") or [],
+        summary=row.get("summary") or None,
         image_paths=row.get("image_paths") or [],
         video_paths=row.get("video_paths") or [],
     )

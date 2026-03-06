@@ -23,6 +23,7 @@ type DraftDetailData = {
   blog_title: string;
   blog_body: string;
   blog_hashtags: string[];
+  summary?: string | null;
   image_paths?: string[];
 };
 
@@ -38,6 +39,7 @@ export default function DraftDetailPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [hashtags, setHashtags] = useState("");
+  const [summary, setSummary] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export default function DraftDetailPage() {
         setTitle(d.blog_title || "");
         setBody(d.blog_body || "");
         setHashtags((d.blog_hashtags || []).join(" "));
+        setSummary(d.summary || "");
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
         setError(msg);
@@ -79,6 +82,7 @@ export default function DraftDetailPage() {
       const updates: Record<string, unknown> = {
         blog_title: title,
         blog_body: body,
+        summary,
       };
       if (data?.post_type !== "coupang") {
         updates.blog_hashtags = hashtags.split(" ").filter((t) => t.startsWith("#"));
@@ -172,6 +176,16 @@ export default function DraftDetailPage() {
           </button>
         </div>
         <div style={{ padding: 14 }}>
+          <div className="form-field" style={{ marginBottom: 10 }}>
+            <label className="form-label" style={{ fontSize: 11 }}>💬 한줄 요약</label>
+            <input
+              className="form-input"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="리뷰 핵심을 1~2문장으로 요약"
+              style={{ background: "#f0f9ff", borderColor: "#bae6fd", color: "#0369a1" }}
+            />
+          </div>
           <div className="form-field" style={{ marginBottom: 10 }}>
             <label className="form-label" style={{ fontSize: 11 }}>
               {isCoupang ? "한줄평" : "제목"}

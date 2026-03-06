@@ -30,6 +30,7 @@ CREATE TABLE drafts (
   blog_hashtags   TEXT[] DEFAULT '{}',
   instagram_caption TEXT NOT NULL DEFAULT '',
   instagram_hashtags TEXT[] DEFAULT '{}',
+  summary         TEXT,
   status          TEXT NOT NULL DEFAULT 'draft',
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -38,6 +39,7 @@ CREATE TABLE drafts (
 -- ※ 이미 테이블이 존재하는 경우 아래 구문으로 컬럼만 추가하세요:
 -- ALTER TABLE drafts ADD COLUMN IF NOT EXISTS post_type TEXT NOT NULL DEFAULT 'blog';
 -- ALTER TABLE drafts ADD COLUMN IF NOT EXISTS coupang_url TEXT;
+-- ALTER TABLE drafts ADD COLUMN IF NOT EXISTS summary TEXT;
 
 -- 2. posts 테이블 (발행 이력)
 CREATE TABLE posts (

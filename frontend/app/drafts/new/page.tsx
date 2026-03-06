@@ -32,6 +32,7 @@ type DraftPreview = {
   blog_title: string;
   blog_body: string;
   blog_hashtags: string[];
+  summary?: string | null;
 };
 
 export default function NewDraftPage() {
@@ -358,6 +359,11 @@ export default function NewDraftPage() {
               <button className="copy-btn" onClick={handleCopy}>{copied ? "✓ 복사됨" : "복사"}</button>
             </div>
             <div className="preview-body">
+              {preview.summary && (
+                <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: "#0369a1", lineHeight: 1.6 }}>
+                  💬 {preview.summary}
+                </div>
+              )}
               <div className="preview-title">{preview.blog_title}</div>
               <div style={{ fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
                 {preview.blog_body.slice(0, 500)}{preview.blog_body.length > 500 && "..."}
