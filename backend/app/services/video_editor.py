@@ -43,7 +43,7 @@ def merge_video_with_narration(
             # Windows 경로 구분자를 슬래시로 변환 (FFmpeg/libass 호환)
             ass_path_fwd = ass_path.replace("\\", "/")
             fonts_dir_fwd = fonts_dir.replace("\\", "/")
-            vf = f"ass={ass_path_fwd}:fontsdir={fonts_dir_fwd}"
+            vf = f"ass='{ass_path_fwd}':fontsdir='{fonts_dir_fwd}':force_style='Fontname=NotoSansKR-Bold'"
 
         cmd = [
             "ffmpeg", "-y",
@@ -62,9 +62,10 @@ def merge_video_with_narration(
         if vf:
             cmd += ["-vf", vf]
         cmd.append(output_path)
-
+        logger.warning("FFmpeg cmd: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, timeout=120)
         stderr_text = result.stderr.decode(errors="replace")
+        logger.warning("FFmpeg stderr:\n%s", stderr_text)
         if result.returncode != 0:
             logger.error("FFmpeg 실패: %s", stderr_text)
             raise RuntimeError(f"영상 병합 실패: {stderr_text[:300]}")
