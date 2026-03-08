@@ -38,9 +38,9 @@ def generate_ass(word_timings: List[dict]) -> str:
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # 흰색 텍스트, 핫핑크 아웃라인(두께 8), 검정 섀도(3), 왼쪽 하단 정렬
+        # 흰색 텍스트, 핫핑크 아웃라인(두께 8), 검정 섀도(3), 중앙 하단 정렬
         "Style: Default,NotoSansKR-Bold,85,&H00FFFFFF,&H000000FF,"
-        "&H009314FF,&H00000000,1,0,0,0,100,100,3,0,1,8,3,1,60,60,400,1\n"
+        "&H009314FF,&H00000000,1,0,0,0,100,100,3,0,1,8,3,2,60,60,400,1\n"
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
