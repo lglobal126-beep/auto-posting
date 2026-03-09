@@ -45,6 +45,8 @@ async def create_shorts(
     llm_api_key = os.getenv("LLM_API_KEY", "")
     supabase_client = db.get_supabase()
 
+    target_dur = payload.video_duration or 20
+
     # 1) 나레이션 스크립트 생성
     script_result = generate_shorts_script(
         llm_api_url=llm_api_url,
@@ -58,19 +60,32 @@ async def create_shorts(
         raise HTTPException(status_code=500, detail=f"스크립트 생성 실패: {script_result['error']}")
 
     script = script_result["script"]
-    logger.info("스크립트 생성 완료: %d자 (영상 %ds 기준, 목표 %.0f~%.0f자)",
-                len(script), payload.video_duration or 0,
-                (payload.video_duration or 20) * 3.8,
-                (payload.video_duration or 20) * 4.5)
+    logger.info("스크립트: %d자 | 내용: %s", len(script), script[:100])
 
     # 2) Edge TTS 생성 (오디오 + 단어 타이밍)
     try:
         audio_bytes, word_timings = await generate_tts_audio(script)
-        if word_timings:
-            audio_dur_ms = word_timings[-1]["end_ms"]
-            logger.info("TTS 완료: 오디오 %.1f초, 단어 %d개", audio_dur_ms / 1000, len(word_timings))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
+
+    # 3) 오디오 길이 측정 → 배속 계산 + 타이밍 스케일링
+    audio_speed = 1.0
+    if word_timings:
+        audio_dur_ms = word_timings[-1]["end_ms"]
+        audio_dur_s = audio_dur_ms / 1000.0
+        logger.info("TTS 원본: %.1f초 | 목표: %d초", audio_dur_s, target_dur)
+
+        if audio_dur_s > 0 and abs(audio_dur_s - target_dur) > 0.5:
+            # 오디오를 영상 길이에 정확히 맞추기 위한 배속
+            audio_speed = audio_dur_s / target_dur
+            # 자막 타이밍을 배속에 맞게 스케일링
+            scale = target_dur / audio_dur_s
+            for w in word_timings:
+                w["start_ms"] = int(w["start_ms"] * scale)
+                w["end_ms"] = int(w["end_ms"] * scale)
+            logger.info("배속 조정: %.2fx | 자막 타이밍 %.2f배 스케일링", audio_speed, scale)
+    else:
+        logger.warning("단어 타이밍 없음 — 자막 생성 불가")
 
     # 자막 ASS 생성
     ass_content = generate_ass(word_timings)
@@ -88,7 +103,7 @@ async def create_shorts(
 
     audio_public_url = supabase_client.storage.from_("media").get_public_url(audio_path)
 
-    # 3) 원본 영상 다운로드
+    # 4) 원본 영상 다운로드
     try:
         video_bytes = supabase_client.storage.from_("media").download(payload.video_path)
     except Exception as e:
@@ -96,13 +111,19 @@ async def create_shorts(
 
     ext = payload.video_path.rsplit(".", 1)[-1].lower() or "mp4"
 
-    # 4) FFmpeg로 영상 + 나레이션 병합
+    # 5) FFmpeg로 영상 + 나레이션 + 자막 병합
     try:
-        merged_bytes = merge_video_with_narration(video_bytes, audio_bytes, video_ext=ext, ass_content=ass_content)
+        merged_bytes = merge_video_with_narration(
+            video_bytes,
+            audio_bytes,
+            video_ext=ext,
+            ass_content=ass_content,
+            audio_speed=audio_speed,
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 5) 결과 영상 Supabase 업로드
+    # 6) 결과 영상 Supabase 업로드
     result_path = f"shorts/{int(time.time())}_result.mp4"
     try:
         supabase_client.storage.from_("media").upload(

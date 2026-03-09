@@ -14,10 +14,11 @@ def merge_video_with_narration(
     audio_bytes: bytes,
     video_ext: str = "mp4",
     ass_content: str = "",
+    audio_speed: float = 1.0,
 ) -> bytes:
     """
-    원본 영상을 루프하며 TTS 나레이션 + 자막을 합성합니다.
-    - 영상을 오디오 길이만큼 무한 루프 후 오디오 끝에서 자동 컷
+    원본 영상에 TTS 나레이션 + 자막을 합성합니다.
+    - audio_speed: TTS 오디오를 이 배속으로 재생 (>1이면 빨라짐)
     - ASS 자막이 있으면 burn-in
     Returns: MP4 bytes
     """
@@ -31,28 +32,36 @@ def merge_video_with_narration(
         with open(audio_path, "wb") as f:
             f.write(audio_bytes)
 
+        # --- 비디오 필터 (자막) ---
         vf = ""
         if ass_content:
             ass_path = os.path.join(tmpdir, "subtitles.ass")
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(ass_content)
-            # 레포에 번들된 폰트 디렉토리를 libass에 명시
+
             fonts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
             font_files = os.listdir(fonts_dir) if os.path.isdir(fonts_dir) else []
             logger.info("폰트 디렉토리: %s | 파일: %s", fonts_dir, font_files)
-            # Windows 경로 구분자를 슬래시로 변환 (FFmpeg/libass 호환)
-            ass_path_fwd = ass_path.replace("\\", "/")
-            fonts_dir_fwd = fonts_dir.replace("\\", "/")
-            vf = f"ass='{ass_path_fwd}':fontsdir='{fonts_dir_fwd}':force_style='Fontname=NotoSansKR-Bold'"
+
+            # FFmpeg 필터에서 경로 구분자: 슬래시로 통일, 콜론 이스케이프
+            ass_esc = ass_path.replace("\\", "/").replace(":", "\\:")
+            fonts_esc = fonts_dir.replace("\\", "/").replace(":", "\\:")
+            vf = f"ass={ass_esc}:fontsdir={fonts_esc}"
+
+        # --- 오디오 필터 (배속 조정) ---
+        af = ""
+        if audio_speed != 1.0 and audio_speed > 0:
+            af = _build_atempo_chain(audio_speed)
+            logger.info("오디오 배속: %.2fx → atempo=%s", audio_speed, af)
 
         cmd = [
             "ffmpeg", "-y",
             "-i", video_path,
             "-i", audio_path,
             "-c:v", "libx264",
-            "-preset", "ultrafast",  # 메모리 최소화 (fast → ultrafast)
-            "-crf", "28",            # 압축률 높여 메모리 절약
-            "-threads", "1",         # 단일 스레드로 메모리 절약
+            "-preset", "ultrafast",
+            "-crf", "28",
+            "-threads", "1",
             "-c:a", "aac",
             "-b:a", "96k",
             "-map", "0:v:0",
@@ -61,21 +70,46 @@ def merge_video_with_narration(
         ]
         if vf:
             cmd += ["-vf", vf]
+        if af:
+            cmd += ["-af", af]
         cmd.append(output_path)
-        logger.warning("FFmpeg cmd: %s", " ".join(cmd))
+
+        logger.info("FFmpeg cmd: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, timeout=120)
         stderr_text = result.stderr.decode(errors="replace")
-        logger.warning("FFmpeg stderr:\n%s", stderr_text)
+
         if result.returncode != 0:
-            logger.error("FFmpeg 실패: %s", stderr_text)
+            logger.error("FFmpeg 실패:\n%s", stderr_text[-1000:])
             raise RuntimeError(f"영상 병합 실패: {stderr_text[:300]}")
+
         # 자막/폰트 관련 경고 로깅
         for line in stderr_text.splitlines():
-            if any(k in line.lower() for k in ("ass", "font", "subtitle", "warn", "error")):
-                logger.info("FFmpeg: %s", line)
+            low = line.lower()
+            if any(k in low for k in ("ass", "font", "subtitle", "warn", "error")):
+                logger.info("FFmpeg: %s", line.strip())
 
         with open(output_path, "rb") as f:
             output_bytes = f.read()
 
     logger.info("영상 병합 완료: %d bytes", len(output_bytes))
     return output_bytes
+
+
+def _build_atempo_chain(speed: float) -> str:
+    """
+    FFmpeg atempo 필터는 0.5~100.0 범위만 지원.
+    0.5 미만이나 100 초과는 체이닝으로 해결.
+    """
+    if speed <= 0:
+        return "atempo=1.0"
+
+    filters = []
+    remaining = speed
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    filters.append(f"atempo={remaining:.4f}")
+    return ",".join(filters)
