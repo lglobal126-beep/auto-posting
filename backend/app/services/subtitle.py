@@ -1,56 +1,20 @@
 """
-edge-tts 단어 타이밍으로 ASS 자막 파일 생성 (여단오 스타일)
+TTS 단어 타이밍 → FFmpeg drawtext 자막 필터 생성
+스타일: 흰색 텍스트 + 핫핑크 테두리 + 검은 그림자 (여단오 스타일)
 """
+import os
 from typing import List
 
 
-def _ms_to_ass(ms: int) -> str:
-    h = ms // 3_600_000
-    m = (ms % 3_600_000) // 60_000
-    s = (ms % 60_000) // 1_000
-    cs = (ms % 1_000) // 10
-    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+# 번들된 한글 폰트
+FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "NotoSansKR-Bold.ttf")
 
 
-def generate_ass(word_timings: List[dict]) -> str:
-    """
-    단어별 타이밍을 받아 ASS 자막 문자열을 반환합니다.
-    word_timings: [{"word": str, "start_ms": int, "end_ms": int}, ...]
-
-    스타일: 굵은 흰색 텍스트 + 핫핑크 아웃라인 + 검은 그림자
-    """
-    if not word_timings:
-        return ""
-
-    # ASS 컬러: &HAABBGGRR
-    # 흰색 텍스트: &H00FFFFFF
-    # 핫핑크 아웃라인 (R=255,G=20,B=147 → BGR): &H009314FF
-    # 검정 그림자: &H00000000
-    header = (
-        "[Script Info]\n"
-        "ScriptType: v4.00+\n"
-        "PlayResX: 1080\n"
-        "PlayResY: 1920\n"
-        "WrapStyle: 0\n"
-        "\n"
-        "[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
-        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
-        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Arial 폴백 — libass가 NotoSansKR-Bold 못 찾으면 Arial 사용
-        "Style: Default,Arial,85,&H00FFFFFF,&H000000FF,"
-        "&H009314FF,&H00000000,1,0,0,0,100,100,3,0,1,8,3,2,60,60,400,1\n"
-        "\n"
-        "[Events]\n"
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-    )
-
-    # 단어 그룹핑: 3단어 또는 누적 12자 초과 시 새 라인
+def _group_words(word_timings: List[dict]) -> List[List[dict]]:
+    """3단어 또는 12자 초과 시 그룹 분리"""
     groups: List[List[dict]] = []
     current: List[dict] = []
     current_chars = 0
-
     for w in word_timings:
         current.append(w)
         current_chars += len(w["word"])
@@ -58,15 +22,51 @@ def generate_ass(word_timings: List[dict]) -> str:
             groups.append(current)
             current = []
             current_chars = 0
-
     if current:
         groups.append(current)
+    return groups
 
-    events = ""
+
+def build_drawtext_filter(word_timings: List[dict], font_path: str = "") -> str:
+    """
+    단어 타이밍 → FFmpeg drawtext 필터 체인 문자열.
+    반환값을 FFmpeg -vf 인자로 그대로 사용 가능.
+    """
+    if not word_timings:
+        return ""
+
+    fp = font_path or FONT_PATH
+    if not os.path.isfile(fp):
+        return ""
+
+    # FFmpeg 필터 내 경로 이스케이핑: \ → /, : → \:
+    font_esc = fp.replace("\\", "/").replace(":", "\\:")
+    groups = _group_words(word_timings)
+
+    parts = []
     for group in groups:
-        start = _ms_to_ass(group[0]["start_ms"])
-        end = _ms_to_ass(group[-1]["end_ms"])
+        start_s = group[0]["start_ms"] / 1000.0
+        end_s = group[-1]["end_ms"] / 1000.0
         text = " ".join(w["word"] for w in group)
-        events += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n"
+        # drawtext 텍스트 이스케이핑
+        text_esc = (text
+                    .replace("\\", "\\\\")
+                    .replace("'", "'\\''")
+                    .replace(":", "\\:")
+                    .replace("%", "%%"))
 
-    return header + events
+        part = (
+            f"drawtext=fontfile='{font_esc}'"
+            f":text='{text_esc}'"
+            f":fontsize=50"
+            f":fontcolor=white"
+            f":borderw=4"
+            f":bordercolor=0xFF1493"
+            f":shadowcolor=black:shadowx=2:shadowy=2"
+            f":x=(w-text_w)/2"
+            f":y=h-h/6"
+            f":enable='between(t,{start_s:.3f},{end_s:.3f})'"
+        )
+        parts.append(part)
+
+    return ",".join(parts)

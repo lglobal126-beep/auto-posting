@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.services import database as db
 from app.services.llm import generate_shorts_script
 from app.services.tts import generate_tts_audio
-from app.services.subtitle import generate_ass
+from app.services.subtitle import build_drawtext_filter
 from app.services.video_editor import merge_video_with_narration
 
 router = APIRouter()
@@ -62,33 +62,30 @@ async def create_shorts(
     script = script_result["script"]
     logger.info("스크립트: %d자 | 내용: %s", len(script), script[:100])
 
-    # 2) Edge TTS 생성 (오디오 + 단어 타이밍)
+    # 2) Edge TTS 생성
     try:
         audio_bytes, word_timings = await generate_tts_audio(script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS 생성 실패: {e}")
 
-    # 3) 오디오 길이 측정 → 배속 계산 + 타이밍 스케일링
-    audio_speed = 1.0
+    # 3) 자막 타이밍 스케일링 (TTS 오디오 → 목표 영상 길이에 맞춤)
+    #    실제 atempo는 video_editor에서 ffprobe로 정확히 계산하지만,
+    #    자막 타이밍은 여기서 미리 스케일링
     if word_timings:
-        audio_dur_ms = word_timings[-1]["end_ms"]
-        audio_dur_s = audio_dur_ms / 1000.0
-        logger.info("TTS 원본: %.1f초 | 목표: %d초", audio_dur_s, target_dur)
+        tts_dur_ms = word_timings[-1]["end_ms"]
+        tts_dur_s = tts_dur_ms / 1000.0
+        logger.info("TTS 단어타이밍: %.1f초 | 목표: %d초", tts_dur_s, target_dur)
 
-        if audio_dur_s > 0 and abs(audio_dur_s - target_dur) > 0.5:
-            # 오디오를 영상 길이에 정확히 맞추기 위한 배속
-            audio_speed = audio_dur_s / target_dur
-            # 자막 타이밍을 배속에 맞게 스케일링
-            scale = target_dur / audio_dur_s
+        if tts_dur_s > 0:
+            scale = target_dur / tts_dur_s
             for w in word_timings:
                 w["start_ms"] = int(w["start_ms"] * scale)
                 w["end_ms"] = int(w["end_ms"] * scale)
-            logger.info("배속 조정: %.2fx | 자막 타이밍 %.2f배 스케일링", audio_speed, scale)
-    else:
-        logger.warning("단어 타이밍 없음 — 자막 생성 불가")
 
-    # 자막 ASS 생성
-    ass_content = generate_ass(word_timings)
+    # 자막 drawtext 필터 생성
+    subtitle_vf = build_drawtext_filter(word_timings)
+    logger.info("자막 필터 길이: %d chars | 생성 여부: %s",
+                len(subtitle_vf), "OK" if subtitle_vf else "SKIP")
 
     # TTS 오디오를 Supabase에 업로드
     audio_path = f"shorts/{int(time.time())}_narration.mp3"
@@ -111,19 +108,21 @@ async def create_shorts(
 
     ext = payload.video_path.rsplit(".", 1)[-1].lower() or "mp4"
 
-    # 5) FFmpeg로 영상 + 나레이션 + 자막 병합
+    # 5) FFmpeg 병합 (영상 + 나레이션 + 자막)
+    #    - target_duration: 출력 길이 정확히 고정
+    #    - audio_speed: video_editor가 ffprobe로 자동 계산
     try:
         merged_bytes = merge_video_with_narration(
             video_bytes,
             audio_bytes,
             video_ext=ext,
-            ass_content=ass_content,
-            audio_speed=audio_speed,
+            subtitle_vf=subtitle_vf,
+            target_duration=target_dur,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 6) 결과 영상 Supabase 업로드
+    # 6) 결과 영상 업로드
     result_path = f"shorts/{int(time.time())}_result.mp4"
     try:
         supabase_client.storage.from_("media").upload(
